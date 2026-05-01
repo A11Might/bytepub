@@ -1,0 +1,63 @@
+# bytepub
+
+将 ByteByteGo 课程内容抓取并转换为 EPUB 电子书，支持图片、公式、表格的完整保留。
+
+## 安装
+
+```bash
+pip install -e .
+playwright install chromium
+```
+
+## 使用
+
+### 测试单页
+
+```bash
+python3.11 -m src.cli test "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
+```
+
+运行后在 `output/test/` 下生成：
+
+```
+output/test/
+├── cleaned.html    # 清洗后的 HTML（可直接浏览器打开预览）
+├── test.epub       # 生成的 EPUB 电子书
+├── assets/         # 下载的图片资源
+└── cache/          # HTML 缓存（再次运行时跳过下载）
+```
+
+完整样例见 [`examples/`](examples/) 目录。
+
+### 抓取整门课程
+
+```bash
+# 免费章节
+python3.11 -m src.cli scrape "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
+
+# 需要登录（首次打开浏览器登录，之后自动复用 session）
+python3.11 -m src.cli scrape "https://bytebytego.com/courses/xxx/chapter-slug"
+```
+
+### 常用选项
+
+| 选项 | 说明 |
+|------|------|
+| `--no-auth` | 跳过登录，仅抓取免费内容 |
+| `-o output` | 输出目录（默认 output） |
+| `--refresh 1 3` | 重新抓取指定章节，不加编号则刷新全部 |
+| `--delay-min 3 --delay-max 8` | 页面间隔秒数 |
+| `--cover image.png` | 自定义封面图 |
+
+## 功能
+
+- **图片处理**：自动下载、检测真实格式、WebP 转 PNG、路径重写
+- **公式渲染**：从 KaTeX 提取 MathML，EPUB 原生支持
+- **表格样式**：自动添加边框和表头样式
+- **本地缓存**：HTML 和图片缓存到本地，支持断点续抓
+- **Session 持久化**：登录一次保存到 `output/.session.json`，下次自动加载
+- **章节发现**：自动从侧边栏识别课程全部章节
+
+## 免责声明
+
+本项目仅供个人学习使用，目的是将已购买的课程内容导出至 Kindle 等设备离线阅读，请勿用于任何非法用途。课程内容版权归原作者所有，请尊重知识产权。
