@@ -5,6 +5,51 @@ from ebooklib import epub
 
 from src.models import CleanedPage
 
+MIME_MAP = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+
+EPUB_CSS = """\
+body { font-family: sans-serif; line-height: 1.6; }
+h5 { font-size: 1.1em; }
+h6 { font-size: 1em; }
+table { border-collapse: collapse; margin: 1em 0; width: 100%; }
+th, td { border: 1px solid #999; padding: 0.4em 0.6em; text-align: left; }
+th { background-color: #f0f0f0; font-weight: bold; }
+img { max-width: 100%; height: auto; }
+"""
+
+
+def rewrite_image_paths(html: str, pages: list[CleanedPage], assets_dir: Path, prefix: str = "images/") -> str:
+    """Rewrite img src from bare prefix to actual filename with extension.
+
+    Args:
+        html: The HTML content to rewrite.
+        pages: List of CleanedPage with image info.
+        assets_dir: Directory containing actual asset files.
+        prefix: Path prefix used in img src (e.g. "images/" for EPUB, "assets/" for HTML).
+    """
+    # Build prefix -> actual filename mapping
+    prefix_to_actual: dict[str, str] = {}
+    if assets_dir.exists():
+        for f in assets_dir.iterdir():
+            if f.is_file():
+                prefix_to_actual[f.stem] = f.name
+
+    for page in pages:
+        for img in page.images:
+            bare = img.filename  # e.g. "ch01-001"
+            actual_name = prefix_to_actual.get(bare)
+            if actual_name:
+                html = html.replace(f"{prefix}{bare}\"", f"{prefix}{actual_name}\"")
+                html = html.replace(f"{prefix}{bare}<", f"{prefix}{actual_name}<")
+    return html
+
 
 def generate_cover_svg(title: str, subtitle: str = "") -> str:
     escaped_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -45,6 +90,14 @@ def build_epub(
         book.set_cover("cover.svg", cover_svg.encode())
 
     # Chapters
+    nav_css = epub.EpubItem(
+        uid="style",
+        file_name="style.css",
+        media_type="text/css",
+        content=EPUB_CSS,
+    )
+    book.add_item(nav_css)
+
     chapters = []
     for page in pages:
         chapter_file = f"ch{page.chapter.index:02d}.xhtml"
@@ -53,21 +106,31 @@ def build_epub(
             file_name=chapter_file,
             lang="en",
         )
-        chapter.content = page.html
+        html = page.html
+        if assets_dir:
+            html = rewrite_image_paths(html, [page], assets_dir, "images/")
+        chapter.content = html
+        chapter.add_item(nav_css)
         book.add_item(chapter)
         chapters.append(chapter)
 
-    # Embed images
+    # Embed images — match prefix to actual file in assets_dir
     if assets_dir and assets_dir.exists():
         for page in pages:
             for img in page.images:
-                img_path = assets_dir / img.filename
-                if img_path.exists():
-                    epub_image = epub.EpubImage()
-                    epub_image.file_name = f"images/{img.filename}"
-                    epub_image.media_type = img.media_type
-                    epub_image.content = img_path.read_bytes()
-                    book.add_item(epub_image)
+                # img.filename is a prefix like "ch01-001" (no extension)
+                # Find actual file with any extension
+                matches = list(assets_dir.glob(f"{img.filename}.*"))
+                if not matches:
+                    continue
+                actual = matches[0]
+                ext = actual.suffix.lower()
+                media_type = MIME_MAP.get(ext, "image/png")
+                epub_image = epub.EpubImage()
+                epub_image.file_name = f"images/{actual.name}"
+                epub_image.media_type = media_type
+                epub_image.content = actual.read_bytes()
+                book.add_item(epub_image)
 
     # TOC and navigation
     book.toc = chapters

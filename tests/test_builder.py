@@ -49,11 +49,12 @@ def test_build_epub_has_multiple_chapters(tmp_path):
 
 def test_build_epub_with_images(tmp_path):
     png_data = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100  # minimal PNG-like bytes
+    # Asset filenames are prefixes without extension; actual file has extension
     img_path = tmp_path / "ch01-001.png"
     img_path.write_bytes(png_data)
 
-    images = [Asset(filename="ch01-001.png", original_url="https://example.com/img.png", media_type="image/png")]
-    pages = [_make_cleaned_page(1, "With Image", '<h1>With Image</h1><img src="ch01-001.png"/>', images)]
+    images = [Asset(filename="ch01-001", original_url="https://example.com/img.png", media_type="")]
+    pages = [_make_cleaned_page(1, "With Image", '<h1>With Image</h1><img src="images/ch01-001"/>', images)]
     output = tmp_path / "test.epub"
     build_epub("Test Book", pages, output, assets_dir=tmp_path)
     book = epub.read_epub(str(output))

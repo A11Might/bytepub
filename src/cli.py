@@ -29,12 +29,13 @@ def cmd_test(args: argparse.Namespace) -> None:
     output_dir = Path(args.output) / "test"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auth
-    session_path = Path(args.session) if args.session else None
+    # Auth — auto-save/load session from output/.session.json
+    session_path = Path(args.session) if args.session else Path("output/.session.json")
     cookie_file = Path(args.cookies) if args.cookies else None
     if args.no_auth:
         pw, context = no_auth_session()
-    elif session_path and session_path.exists():
+    elif session_path.exists():
+        print(f"Loading session from {session_path}")
         pw, context = load_session(session_path)
     elif cookie_file:
         pw, context = create_session(cookie_file=cookie_file)
@@ -45,20 +46,35 @@ def cmd_test(args: argparse.Namespace) -> None:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
         scraped = fetch_page(context, chapter, output_dir)
 
-        # Save raw HTML
-        raw_path = output_dir / "raw.html"
-        raw_path.write_text(scraped.raw_html, encoding="utf-8")
-
         # Clean
         cleaned = clean_page(scraped)
 
-        # Save cleaned HTML
+        # Update chapter title from H1
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(cleaned.html, "lxml")
+        h1 = soup.find("h1")
+        if h1:
+            cleaned.chapter.title = h1.get_text().strip()
+
+        # Save cleaned HTML (with CSS, rewritten img paths for local file viewing)
+        from src.builder import rewrite_image_paths, EPUB_CSS
+        assets_dir = output_dir / "assets"
+        cleaned_html = cleaned.html
+        if assets_dir.exists():
+            cleaned_html = cleaned_html.replace("images/", "assets/")
+            cleaned_html = rewrite_image_paths(cleaned_html, [cleaned], assets_dir, "assets/")
+        # Wrap in full HTML document with embedded CSS
+        cleaned_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+{EPUB_CSS}
+</style></head>
+{cleaned_html}
+</html>"""
         cleaned_path = output_dir / "cleaned.html"
-        cleaned_path.write_text(cleaned.html, encoding="utf-8")
+        cleaned_path.write_text(cleaned_html, encoding="utf-8")
 
         # Build EPUB
         from src.builder import build_epub
-        assets_dir = output_dir / "assets"
         epub_path = output_dir / "test.epub"
         build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir)
 
@@ -67,10 +83,9 @@ def cmd_test(args: argparse.Namespace) -> None:
         print(f"Title:     {cleaned.chapter.title}")
         print(f"Course:    {course_slug}")
         print(f"Word count: {cleaned.word_count}")
-        print(f"Images:    {len(cleaned.images)} ({', '.join(f'{a.media_type}' for a in cleaned.images) or 'none'})")
+        print(f"Images:    {len(cleaned.images)} ({', '.join(a.filename for a in cleaned.images[:5])}{'...' if len(cleaned.images) > 5 else ''})")
         print(f"Formulas:  {cleaned.formula_count}")
         print(f"HTML size: {len(cleaned.html):,} chars")
-        print(f"Raw saved: {raw_path}")
         print(f"Clean saved: {cleaned_path}")
         print(f"EPUB saved: {epub_path}")
         text_preview = cleaned.html[:200].replace("\n", " ")
@@ -94,12 +109,13 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     output_dir = Path(args.output) / course_slug
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auth
-    session_path = Path(args.session) if args.session else None
+    # Auth — auto-save/load session from output/.session.json
+    session_path = Path(args.session) if args.session else Path("output/.session.json")
     cookie_file = Path(args.cookies) if args.cookies else None
     if args.no_auth:
         pw, context = no_auth_session()
-    elif session_path and session_path.exists():
+    elif session_path.exists():
+        print(f"Loading session from {session_path}")
         pw, context = load_session(session_path)
     elif cookie_file:
         pw, context = create_session(cookie_file=cookie_file)
@@ -117,11 +133,6 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         print(f"\nFound {len(chapters)} chapters:")
         for ch in chapters:
             print(f"  {ch.index}. {ch.title}")
-
-        confirm = input("\nContinue? [Y/n] ").strip().lower()
-        if confirm in ("n", "no"):
-            print("Aborted.")
-            return
 
         # Parse refresh list
         refresh_set: set[int] | None = None
@@ -151,11 +162,28 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 
         # Update chapter titles from H1 in cleaned HTML
         from bs4 import BeautifulSoup
+        from src.builder import rewrite_image_paths, EPUB_CSS
+        assets_dir = output_dir / "assets"
         for cleaned in cleaned_pages:
             soup = BeautifulSoup(cleaned.html, "lxml")
             h1 = soup.find("h1")
             if h1:
                 cleaned.chapter.title = h1.get_text().strip()
+
+            # Save cleaned HTML for each chapter
+            ch_num = cleaned.chapter.index
+            cleaned_html = cleaned.html
+            if assets_dir.exists():
+                cleaned_html = cleaned_html.replace("images/", "assets/")
+                cleaned_html = rewrite_image_paths(cleaned_html, [cleaned], assets_dir, "assets/")
+            cleaned_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+{EPUB_CSS}
+</style></head>
+{cleaned_html}
+</html>"""
+            cleaned_path = output_dir / f"ch{ch_num:02d}.html"
+            cleaned_path.write_text(cleaned_html, encoding="utf-8")
 
         # Build EPUB
         epub_filename = args.output_file or f"{course_slug}.epub"

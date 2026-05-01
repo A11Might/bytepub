@@ -64,6 +64,12 @@ def clean_page(
 
 
 def _remove_unwanted(content: Tag) -> None:
+    # Preserve h1 inside <header> before removing it
+    for header in content.find_all("header"):
+        h1 = header.find("h1")
+        if h1:
+            h1 = h1.extract()
+            header.insert_before(h1)
     for tag_name in REMOVE_TAGS:
         for tag in content.find_all(tag_name):
             tag.decompose()
@@ -89,9 +95,24 @@ def _process_formulas(content: Tag) -> int:
         else:
             count += 1
 
-    # KaTeX: preserve the rendered output
+    # KaTeX: keep only the MathML part (EPUB supports MathML),
+    # remove the katex-html part (relies on complex CSS not available in EPUB)
     for katex in content.find_all(class_="katex"):
         count += 1
+        mathml_span = katex.find(class_="katex-mathml")
+        html_span = katex.find(class_="katex-html")
+        if mathml_span:
+            # Extract the <math> element from the MathML span
+            math_tag = mathml_span.find("math")
+            if math_tag:
+                math_tag = math_tag.extract()
+                katex.replace_with(math_tag)
+            else:
+                # No <math> found, just remove katex-html
+                if html_span:
+                    html_span.decompose()
+        elif html_span:
+            html_span.decompose()
 
     return count
 
@@ -104,15 +125,24 @@ def _process_images(content: Tag, chapter_index: int) -> list[Asset]:
         if not src:
             continue
         counter += 1
-        # Strip query params for extension detection
-        path_without_query = urlparse(src).path
-        ext = os.path.splitext(path_without_query)[1].lower() or ".png"
-        filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
-        # Use images/ prefix to match EPUB internal structure
-        img["src"] = f"images/{filename}"
+        # Use prefix without extension — actual extension determined by scraper
+        prefix = f"ch{chapter_index:02d}-{counter:03d}"
+        # Use placeholder prefix — rewritten by builder/cli to actual path later
+        img["src"] = f"images/{prefix}"
+        # Remove srcset to avoid external URL references
+        if img.has_attr("srcset"):
+            del img["srcset"]
+        # Remove lazy loading attrs that break EPUB rendering
+        if img.has_attr("loading"):
+            del img["loading"]
+        if img.has_attr("data-nimg"):
+            del img["data-nimg"]
+        # Remove Next.js transparent style
+        if img.has_attr("style") and "transparent" in img.get("style", ""):
+            del img["style"]
         images.append(Asset(
-            filename=filename,
+            filename=prefix,
             original_url=src,
-            media_type=guess_mime(src),
+            media_type="",
         ))
     return images

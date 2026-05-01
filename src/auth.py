@@ -4,9 +4,6 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, BrowserContext
 
 
-CDP_URL = "http://localhost:9222"
-
-
 def _parse_cookie_string(cookie_str: str) -> list[dict]:
     """Parse a cookie header string like 'name1=val1; name2=val2' into Playwright cookie format."""
     cookies = []
@@ -22,20 +19,6 @@ def _parse_cookie_string(cookie_str: str) -> list[dict]:
             "path": "/",
         })
     return cookies
-
-
-def connect_cdp() -> tuple[sync_playwright, BrowserContext]:
-    """Connect to a running Chrome instance via CDP.
-
-    User must launch Chrome with:
-      /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222
-    Then log into ByteByteGo in that Chrome window.
-    """
-    pw = sync_playwright().start()
-    browser = pw.chromium.connect_over_cdp(CDP_URL)
-    context = browser.contexts[0] if browser.contexts else browser.new_context()
-    print(f"Connected to Chrome via CDP ({len(context.pages)} pages open)")
-    return pw, context
 
 
 def create_session(
@@ -64,21 +47,27 @@ def create_session(
         context.add_cookies(cookies)
         print(f"Loaded {len(cookies)} cookies from {cookie_file}")
     else:
-        # Interactive login
+        # Interactive login: open the login page, let user log in
         page = context.new_page()
         page.goto("https://bytebytego.com/login")
-        print("\n=== Please log in to ByteByteGo ===")
-        print("Note: Google OAuth may not work. Try email/password login.")
-        print("Waiting for login to complete...")
-        page.wait_for_url("**/courses**", timeout=300000)
+        print("\n=== Please log in to ByteByteGo in the browser ===")
+        print("After login, navigate to any course page, then press Enter here...")
+        try:
+            input()
+        except EOFError:
+            # Fallback: wait for URL change
+            page.wait_for_url("**/courses**", timeout=300000)
         print("Login successful!")
+        # Don't close the page — keep the logged-in session alive
         page.close()
 
-    # Save session for future use
-    if session_path:
-        storage = context.storage_state()
-        session_path.write_text(json.dumps(storage, indent=2))
-        print(f"Session saved to {session_path}")
+    # Save session for future use (auto-save if no explicit path)
+    if not session_path:
+        session_path = Path("output/.session.json")
+    session_path.parent.mkdir(parents=True, exist_ok=True)
+    storage = context.storage_state()
+    session_path.write_text(json.dumps(storage, indent=2))
+    print(f"Session saved to {session_path}")
 
     return pw, context
 
@@ -111,5 +100,8 @@ def no_auth() -> tuple[sync_playwright, BrowserContext]:
 
 def cleanup(pw: sync_playwright, context: BrowserContext) -> None:
     """Close browser and stop Playwright."""
-    context.close()
+    try:
+        context.close()
+    except Exception:
+        pass
     pw.stop()

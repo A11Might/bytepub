@@ -46,40 +46,44 @@ def build_course_index_url(url: str, course_slug: str) -> str:
 
 
 def discover_chapters(context: BrowserContext, course_url: str) -> list[Chapter]:
-    """Load course index page and extract all chapter links."""
+    """Load a chapter page and extract all chapters from the sidebar menu."""
     course_slug = parse_course_url(course_url)
-    index_url = build_course_index_url(course_url, course_slug)
 
     page = context.new_page()
     try:
-        page.goto(index_url, wait_until="networkidle", timeout=30000)
-        page.wait_for_timeout(2000)
+        page.goto(course_url, wait_until="domcontentloaded", timeout=30000)
+        # Wait for sidebar to render
+        page.wait_for_selector("li.ant-menu-item", timeout=15000)
+        page.wait_for_timeout(1000)
 
-        # Find all links under this course
-        links = page.query_selector_all(f'a[href*="/courses/{course_slug}/"]')
+        # Chapters are in aside > ant-menu-item with data-menu-id containing the course path
+        items = page.query_selector_all("li.ant-menu-item")
         chapters = []
-        seen_slugs = set()
 
-        for link in links:
-            href = link.get_attribute("href") or ""
-            text = link.inner_text().strip()
-            if not text:
+        for item in items:
+            menu_id = item.get_attribute("data-menu-id") or ""
+            # data-menu-id format: "rc-menu-uuid-XXXXX-1-/courses/{slug}/{chapter}"
+            if f"/courses/{course_slug}/" not in menu_id:
                 continue
 
-            # Extract the chapter slug from href
-            link_path = urlparse(href).path.rstrip("/")
-            parts = link_path.split("/")
-            if len(parts) < 3:
-                continue
-            chapter_slug = parts[-1]
-            if chapter_slug == course_slug or chapter_slug in seen_slugs:
+            # Extract path from data-menu-id (after the last course slug segment)
+            path = menu_id.split(f"/courses/{course_slug}/")[-1]
+            chapter_slug = path.strip("/")
+
+            # Get title from <strong> inside the menu item
+            strong = item.query_selector("strong")
+            title = strong.inner_text().strip() if strong else ""
+            if not title:
                 continue
 
-            full_url = href if href.startswith("http") else urljoin(index_url, href)
-            seen_slugs.add(chapter_slug)
+            # Get chapter number from <i> inside the menu item
+            i_tag = item.query_selector("i")
+            num = i_tag.inner_text().strip() if i_tag else ""
+
+            full_url = f"https://bytebytego.com/courses/{course_slug}/{chapter_slug}"
             chapters.append(Chapter(
                 index=len(chapters) + 1,
-                title=text,
+                title=f"{num} {title}" if num else title,
                 url=full_url,
                 slug=chapter_slug,
             ))
@@ -114,7 +118,8 @@ def fetch_page(
     logger.info(f"[fetching] Chapter {chapter.index}: {chapter.title}")
     page = context.new_page()
     try:
-        page.goto(chapter.url, wait_until="networkidle", timeout=30000)
+        page.goto(chapter.url, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_selector("article, [role='main'], main", timeout=15000)
         page.wait_for_timeout(1500)
 
         # Extract the main content area
@@ -126,8 +131,9 @@ def fetch_page(
 
         cache_file.write_text(raw_html, encoding="utf-8")
 
-        # Download assets
-        assets = _download_assets(page, chapter.index, assets_dir)
+        # Download assets (scope to content area so numbering matches cleaner)
+        scope = content or page
+        assets = _download_assets(scope, page, chapter.index, assets_dir)
 
         return ScrapedPage(
             chapter=chapter,
@@ -187,18 +193,24 @@ def _detect_image_format(data: bytes) -> tuple[str, str]:
 
 
 def _download_assets(
+    scope,
     page,
     chapter_index: int,
     assets_dir: Path,
 ) -> list[Asset]:
-    """Download all images from the current page."""
+    """Download all images from the content scope (not the full page).
+
+    Args:
+        scope: The Playwright element to search for img tags (content area).
+        page: The Playwright page (used for base URL and HTTP requests).
+    """
     assets = []
     counter = 0
 
     # Get base URL for resolving relative paths
     base_url = page.url
 
-    images = page.query_selector_all("img")
+    images = scope.query_selector_all("img")
     for img in images:
         src = img.get_attribute("src")
         if not src:

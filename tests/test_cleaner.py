@@ -45,12 +45,15 @@ def test_rewrites_image_paths():
     result = clean_page(page)
     assert len(result.images) == 2
     assert result.images[0].filename.startswith("ch01-")
-    assert result.images[0].media_type == "image/png"
-    assert result.images[1].media_type == "image/svg+xml"
+    # Filenames are prefixes without extension
+    assert result.images[0].filename == "ch01-001"
+    assert result.images[1].filename == "ch01-002"
+    # media_type is empty — determined at build time from actual file
+    assert result.images[0].media_type == ""
     # Original URLs no longer in HTML
     assert "bytebytego.com/images/diagram1.png" not in result.html
-    # Local filenames are in HTML
-    assert result.images[0].filename in result.html
+    # Local filenames are in HTML (with images/ prefix)
+    assert f"images/{result.images[0].filename}" in result.html
 
 
 def test_counts_formulas():

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Test / tool cache
+.pytest_cache/
+
+# Output (scraped content, EPUBs, session)
+output/
+
+# Design docs (local reference only)
+docs/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
