@@ -1,0 +1,68 @@
+import zipfile
+from pathlib import Path
+from ebooklib import epub
+
+from src.builder import build_epub, generate_cover_svg
+from src.models import CleanedPage, Chapter, Asset
+
+
+def _make_cleaned_page(
+    index: int = 1,
+    title: str = "Chapter One",
+    html: str = "<h1>Chapter One</h1><p>Hello world.</p>",
+    images: list[Asset] | None = None,
+) -> CleanedPage:
+    return CleanedPage(
+        chapter=Chapter(index=index, title=title, url=f"https://example.com/ch{index}", slug=f"ch{index}"),
+        html=html,
+        images=images or [],
+    )
+
+
+def test_build_epub_creates_file(tmp_path):
+    pages = [_make_cleaned_page(1, "Intro", "<h1>Intro</h1><p>Text.</p>")]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output)
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
+def test_build_epub_is_valid_zip(tmp_path):
+    pages = [_make_cleaned_page(1)]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output)
+    assert zipfile.is_zipfile(output)
+
+
+def test_build_epub_has_multiple_chapters(tmp_path):
+    pages = [
+        _make_cleaned_page(1, "Chapter 1", "<h1>Chapter 1</h1>"),
+        _make_cleaned_page(2, "Chapter 2", "<h1>Chapter 2</h1>"),
+        _make_cleaned_page(3, "Chapter 3", "<h1>Chapter 3</h1>"),
+    ]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output)
+    book = epub.read_epub(str(output))
+    titles = [item.title for item in book.toc if hasattr(item, "title")]
+    assert len(titles) == 3
+
+
+def test_build_epub_with_images(tmp_path):
+    png_data = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100  # minimal PNG-like bytes
+    img_path = tmp_path / "ch01-001.png"
+    img_path.write_bytes(png_data)
+
+    images = [Asset(filename="ch01-001.png", original_url="https://example.com/img.png", media_type="image/png")]
+    pages = [_make_cleaned_page(1, "With Image", '<h1>With Image</h1><img src="ch01-001.png"/>', images)]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output, assets_dir=tmp_path)
+    book = epub.read_epub(str(output))
+    image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
+    assert len(image_items) == 1
+
+
+def test_generate_cover_svg():
+    svg = generate_cover_svg("My Book", "A subtitle")
+    assert "<svg" in svg
+    assert "My Book" in svg
+    assert "A subtitle" in svg
