@@ -147,6 +147,7 @@ def build_epub(
     book.add_item(nav_css)
 
     chapters = []
+    toc = []
     for page in pages:
         chapter_file = f"ch{page.chapter.index:02d}.xhtml"
         chapter = epub.EpubHtml(
@@ -157,10 +158,33 @@ def build_epub(
         html = page.html
         if assets_dir:
             html = rewrite_image_paths(html, [page], assets_dir, "images/")
+
+        # Add id anchors to h2 tags and extract sub-sections for TOC
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "lxml")
+        sub_items = []
+        h2_counter = 0
+        for h2 in soup.find_all("h2"):
+            h2_counter += 1
+            anchor_id = f"sec{h2_counter:02d}"
+            h2["id"] = anchor_id
+            sub_items.append(epub.Link(
+                f"{chapter_file}#{anchor_id}",
+                h2.get_text().strip(),
+                f"ch{page.chapter.index:02d}-s{h2_counter:02d}",
+            ))
+        html = str(soup)
+
         chapter.content = html
         chapter.add_item(nav_css)
         book.add_item(chapter)
         chapters.append(chapter)
+
+        # Build nested TOC: chapter with h2 sub-sections
+        if sub_items:
+            toc.append((chapter, sub_items))
+        else:
+            toc.append(chapter)
 
     # Embed images — match prefix to actual file in assets_dir
     if assets_dir and assets_dir.exists():
@@ -181,7 +205,7 @@ def build_epub(
                 book.add_item(epub_image)
 
     # TOC and navigation
-    book.toc = chapters
+    book.toc = toc
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 
