@@ -29,9 +29,9 @@ def cmd_test(args: argparse.Namespace) -> None:
     # Auth
     session_path = Path(args.session) if args.session else None
     if session_path and session_path.exists():
-        pw, browser, context = load_session(session_path)
+        pw, context, profile_dir = load_session(session_path)
     else:
-        pw, browser, context = create_session(session_path)
+        pw, context, profile_dir = create_session(session_path)
 
     try:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
@@ -63,7 +63,7 @@ def cmd_test(args: argparse.Namespace) -> None:
         print("\n=== Done ===")
 
     finally:
-        cleanup(pw, browser)
+        cleanup(pw, context, profile_dir)
 
 
 def cmd_scrape(args: argparse.Namespace) -> None:
@@ -82,9 +82,9 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     # Auth
     session_path = Path(args.session) if args.session else None
     if session_path and session_path.exists():
-        pw, browser, context = load_session(session_path)
+        pw, context, profile_dir = load_session(session_path)
     else:
-        pw, browser, context = create_session(session_path)
+        pw, context, profile_dir = create_session(session_path)
 
     try:
         # Discover chapters
@@ -156,7 +156,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         print(f"Failed/Skipped:  {len(chapters) - len(scraped_pages)}")
 
     finally:
-        cleanup(pw, browser)
+        cleanup(pw, context, profile_dir)
 
 
 def main():
