@@ -56,6 +56,12 @@ def cmd_test(args: argparse.Namespace) -> None:
         cleaned_path = output_dir / "cleaned.html"
         cleaned_path.write_text(cleaned.html, encoding="utf-8")
 
+        # Build EPUB
+        from src.builder import build_epub
+        assets_dir = output_dir / "assets"
+        epub_path = output_dir / "test.epub"
+        build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir)
+
         # Print summary
         print("\n=== Page Test Results ===")
         print(f"Title:     {cleaned.chapter.title}")
@@ -66,6 +72,7 @@ def cmd_test(args: argparse.Namespace) -> None:
         print(f"HTML size: {len(cleaned.html):,} chars")
         print(f"Raw saved: {raw_path}")
         print(f"Clean saved: {cleaned_path}")
+        print(f"EPUB saved: {epub_path}")
         text_preview = cleaned.html[:200].replace("\n", " ")
         print(f"\nPreview: {text_preview}...")
         print("\n=== Done ===")
