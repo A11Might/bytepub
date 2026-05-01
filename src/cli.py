@@ -9,6 +9,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def no_auth_session():
+    """Launch browser without any authentication."""
+    from src.auth import no_auth as _no_auth
+    return _no_auth()
+
+
 def cmd_test(args: argparse.Namespace) -> None:
     """Single page test mode: scrape + clean one page, output summary."""
     from src.auth import create_session, load_session, cleanup
@@ -26,13 +32,14 @@ def cmd_test(args: argparse.Namespace) -> None:
     # Auth
     session_path = Path(args.session) if args.session else None
     cookie_file = Path(args.cookies) if args.cookies else None
-    if session_path and session_path.exists():
+    if args.no_auth:
+        pw, context = no_auth_session()
+    elif session_path and session_path.exists():
         pw, context = load_session(session_path)
+    elif cookie_file:
+        pw, context = create_session(cookie_file=cookie_file)
     else:
-        pw, context = create_session(
-            session_path=session_path,
-            cookie_file=cookie_file,
-        )
+        pw, context = create_session()
 
     try:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
@@ -83,13 +90,14 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     # Auth
     session_path = Path(args.session) if args.session else None
     cookie_file = Path(args.cookies) if args.cookies else None
-    if session_path and session_path.exists():
+    if args.no_auth:
+        pw, context = no_auth_session()
+    elif session_path and session_path.exists():
         pw, context = load_session(session_path)
+    elif cookie_file:
+        pw, context = create_session(cookie_file=cookie_file)
     else:
-        pw, context = create_session(
-            session_path=session_path,
-            cookie_file=cookie_file,
-        )
+        pw, context = create_session()
 
     try:
         # Discover chapters
@@ -176,6 +184,7 @@ def main():
     test_parser.add_argument("--output", "-o", default="output", help="Output directory")
     test_parser.add_argument("--session", "-s", help="Session file path")
     test_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
+    test_parser.add_argument("--no-auth", action="store_true", help="Skip authentication")
 
     # Scrape mode
     scrape_parser = subparsers.add_parser("scrape", help="Scrape full course")
@@ -183,6 +192,7 @@ def main():
     scrape_parser.add_argument("--output", "-o", default="output", help="Output directory")
     scrape_parser.add_argument("--session", "-s", help="Session file path")
     scrape_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
+    scrape_parser.add_argument("--no-auth", action="store_true", help="Skip authentication")
     scrape_parser.add_argument("--output-file", help="EPUB filename (default: {course-slug}.epub)")
     scrape_parser.add_argument("--cover", help="Custom cover image path")
     scrape_parser.add_argument("--refresh", nargs="*", type=int, default=None,

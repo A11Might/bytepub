@@ -4,6 +4,9 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, BrowserContext
 
 
+CDP_URL = "http://localhost:9222"
+
+
 def _parse_cookie_string(cookie_str: str) -> list[dict]:
     """Parse a cookie header string like 'name1=val1; name2=val2' into Playwright cookie format."""
     cookies = []
@@ -19,6 +22,20 @@ def _parse_cookie_string(cookie_str: str) -> list[dict]:
             "path": "/",
         })
     return cookies
+
+
+def connect_cdp() -> tuple[sync_playwright, BrowserContext]:
+    """Connect to a running Chrome instance via CDP.
+
+    User must launch Chrome with:
+      /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222
+    Then log into ByteByteGo in that Chrome window.
+    """
+    pw = sync_playwright().start()
+    browser = pw.chromium.connect_over_cdp(CDP_URL)
+    context = browser.contexts[0] if browser.contexts else browser.new_context()
+    print(f"Connected to Chrome via CDP ({len(context.pages)} pages open)")
+    return pw, context
 
 
 def create_session(
@@ -57,18 +74,6 @@ def create_session(
         print("Login successful!")
         page.close()
 
-    # Verify access by navigating to a course page
-    page = context.new_page()
-    page.goto("https://bytebytego.com/courses", wait_until="networkidle", timeout=15000)
-
-    if "/login" in page.url or "sign-in" in page.url:
-        page.close()
-        raise RuntimeError(
-            "Cookies are invalid or expired. Please re-export cookies from your browser."
-        )
-    print("Session verified!")
-    page.close()
-
     # Save session for future use
     if session_path:
         storage = context.storage_state()
@@ -89,6 +94,18 @@ def load_session(session_path: Path) -> tuple[sync_playwright, BrowserContext]:
         user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     )
     print(f"Session loaded from {session_path}")
+    return pw, context
+
+
+def no_auth() -> tuple[sync_playwright, BrowserContext]:
+    """Launch browser without any authentication. For pages that don't require login."""
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=False)
+    context = browser.new_context(
+        viewport={"width": 1280, "height": 900},
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    )
+    print("Launched browser (no auth)")
     return pw, context
 
 
