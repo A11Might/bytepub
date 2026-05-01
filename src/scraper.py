@@ -2,6 +2,7 @@ import logging
 import os
 import random
 import time
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -170,6 +171,21 @@ def fetch_all(
     return results
 
 
+def _detect_image_format(data: bytes) -> tuple[str, str]:
+    """Detect actual image format from bytes. Returns (ext, media_type)."""
+    if data[:4] == b'\x89PNG':
+        return ".png", "image/png"
+    if data[:3] == b'\xff\xd8\xff':
+        return ".jpg", "image/jpeg"
+    if data[:4] == b'RIFF' and b'WEBP' in data[:12]:
+        return ".webp", "image/webp"
+    if data[:4] == b'GIF8':
+        return ".gif", "image/gif"
+    if b'<svg' in data[:200]:
+        return ".svg", "image/svg+xml"
+    return ".png", "image/png"
+
+
 def _download_assets(
     page,
     chapter_index: int,
@@ -199,25 +215,42 @@ def _download_assets(
         else:
             full_url = src
 
-        # Strip query params for extension detection
-        path_without_query = urlparse(full_url).path
-        ext = os.path.splitext(path_without_query)[1].lower() or ".png"
-        media_type = MIME_MAP.get(ext, "image/png")
-
         counter += 1
+
+        # Download first, then detect actual format
+        body = None
+        try:
+            response = page.request.get(full_url)
+            if response.ok:
+                body = response.body()
+        except Exception as e:
+            logger.warning(f"  Failed to download {full_url}: {e}")
+
+        if body is None:
+            # Use URL extension as fallback
+            path_without_query = urlparse(full_url).path
+            ext = os.path.splitext(path_without_query)[1].lower() or ".png"
+            media_type = MIME_MAP.get(ext, "image/png")
+        else:
+            ext, media_type = _detect_image_format(body)
+
         filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
         local_path = assets_dir / filename
 
-        if not local_path.exists():
-            try:
-                response = page.request.get(full_url)
-                if response.ok:
-                    local_path.write_bytes(response.body())
-                    logger.info(f"  Downloaded: {filename}")
-                else:
-                    logger.warning(f"  Failed to download {full_url}: HTTP {response.status}")
-            except Exception as e:
-                logger.warning(f"  Failed to download {full_url}: {e}")
+        if body and not local_path.exists():
+            # Convert WebP to PNG for EPUB compatibility
+            if ext == ".webp":
+                from PIL import Image
+                img = Image.open(BytesIO(body))
+                png_buf = BytesIO()
+                img.save(png_buf, format="PNG")
+                body = png_buf.getvalue()
+                ext = ".png"
+                media_type = "image/png"
+                filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
+                local_path = assets_dir / filename
+            local_path.write_bytes(body)
+            logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
 
         assets.append(Asset(
             filename=filename,
