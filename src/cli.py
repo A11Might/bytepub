@@ -1,9 +1,6 @@
 import argparse
 import logging
-import sys
 from pathlib import Path
-
-from src.models import ScrapedPage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,10 +25,14 @@ def cmd_test(args: argparse.Namespace) -> None:
 
     # Auth
     session_path = Path(args.session) if args.session else None
+    cookie_file = Path(args.cookies) if args.cookies else None
     if session_path and session_path.exists():
-        pw, context, profile_dir = load_session(session_path)
+        pw, context = load_session(session_path)
     else:
-        pw, context, profile_dir = create_session(session_path)
+        pw, context = create_session(
+            session_path=session_path,
+            cookie_file=cookie_file,
+        )
 
     try:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
@@ -63,7 +64,7 @@ def cmd_test(args: argparse.Namespace) -> None:
         print("\n=== Done ===")
 
     finally:
-        cleanup(pw, context, profile_dir)
+        cleanup(pw, context)
 
 
 def cmd_scrape(args: argparse.Namespace) -> None:
@@ -81,10 +82,14 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 
     # Auth
     session_path = Path(args.session) if args.session else None
+    cookie_file = Path(args.cookies) if args.cookies else None
     if session_path and session_path.exists():
-        pw, context, profile_dir = load_session(session_path)
+        pw, context = load_session(session_path)
     else:
-        pw, context, profile_dir = create_session(session_path)
+        pw, context = create_session(
+            session_path=session_path,
+            cookie_file=cookie_file,
+        )
 
     try:
         # Discover chapters
@@ -156,7 +161,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         print(f"Failed/Skipped:  {len(chapters) - len(scraped_pages)}")
 
     finally:
-        cleanup(pw, context, profile_dir)
+        cleanup(pw, context)
 
 
 def main():
@@ -170,12 +175,14 @@ def main():
     test_parser.add_argument("url", help="Chapter page URL to test")
     test_parser.add_argument("--output", "-o", default="output", help="Output directory")
     test_parser.add_argument("--session", "-s", help="Session file path")
+    test_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
 
     # Scrape mode
     scrape_parser = subparsers.add_parser("scrape", help="Scrape full course")
     scrape_parser.add_argument("url", help="Course index or chapter page URL")
     scrape_parser.add_argument("--output", "-o", default="output", help="Output directory")
     scrape_parser.add_argument("--session", "-s", help="Session file path")
+    scrape_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
     scrape_parser.add_argument("--output-file", help="EPUB filename (default: {course-slug}.epub)")
     scrape_parser.add_argument("--cover", help="Custom cover image path")
     scrape_parser.add_argument("--refresh", nargs="*", type=int, default=None,
