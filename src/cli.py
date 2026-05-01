@@ -204,19 +204,6 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     finally:
         cleanup(pw, context)
 
-    cover_path = Path(args.cover) if args.cover else None
-    build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path)
-
-    print(f"\nEPUB saved to: {epub_path}")
-
-    # Final report
-    cached = sum(1 for p in scraped_pages if p.cached)
-    print(f"\n=== Final Report ===")
-    print(f"Total chapters:  {len(chapters)}")
-    print(f"Scraped:         {len(scraped_pages) - cached}")
-    print(f"From cache:      {cached}")
-    print(f"Failed/Skipped:  {len(chapters) - len(scraped_pages)}")
-
 
 def main():
     parser = argparse.ArgumentParser(
