@@ -14,6 +14,54 @@ MIME_MAP = {
     ".webp": "image/webp",
 }
 
+
+def convert_svgs_to_png(assets_dir: Path) -> None:
+    """Convert all SVG files in assets_dir to PNG using Playwright for accurate rendering."""
+    svg_files = list(assets_dir.glob("*.svg"))
+    if not svg_files:
+        return
+
+    from playwright.sync_api import sync_playwright
+
+    print(f"Converting {len(svg_files)} SVGs to PNG...")
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=True)
+    page = browser.new_page()
+
+    converted = 0
+    for svg_file in svg_files:
+        png_file = svg_file.with_suffix(".png")
+        if png_file.exists():
+            svg_file.unlink()
+            converted += 1
+            continue
+        try:
+            page.goto(f"file://{svg_file.resolve()}")
+            # Get SVG dimensions for proper rendering
+            dimensions = page.evaluate("""() => {
+                const svg = document.querySelector('svg');
+                if (!svg) return { w: 800, h: 600 };
+                const vb = svg.getAttribute('viewBox');
+                if (vb) {
+                    const parts = vb.split(/[\\s,]+/);
+                    return { w: parseFloat(parts[2]) || 800, h: parseFloat(parts[3]) || 600 };
+                }
+                return {
+                    w: parseFloat(svg.getAttribute('width')) || 800,
+                    h: parseFloat(svg.getAttribute('height')) || 600
+                };
+            }""")
+            page.set_viewport_size({"width": int(dimensions["w"]), "height": int(dimensions["h"])})
+            page.screenshot(path=str(png_file), full_page=True)
+            svg_file.unlink()
+            converted += 1
+        except Exception as e:
+            print(f"  Warning: failed to convert {svg_file.name}: {e}")
+
+    browser.close()
+    pw.stop()
+    print(f"Converted {converted}/{len(svg_files)} SVGs to PNG")
+
 EPUB_CSS = """\
 body { font-family: sans-serif; line-height: 1.6; }
 h5 { font-size: 1.1em; }

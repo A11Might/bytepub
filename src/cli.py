@@ -45,55 +45,54 @@ def cmd_test(args: argparse.Namespace) -> None:
     try:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
         scraped = fetch_page(context, chapter, output_dir)
+    finally:
+        cleanup(pw, context)
 
-        # Clean
-        cleaned = clean_page(scraped)
+    # Clean
+    cleaned = clean_page(scraped)
 
-        # Update chapter title from H1
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(cleaned.html, "lxml")
-        h1 = soup.find("h1")
-        if h1:
-            cleaned.chapter.title = h1.get_text().strip()
+    # Update chapter title from H1
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(cleaned.html, "lxml")
+    h1 = soup.find("h1")
+    if h1:
+        cleaned.chapter.title = h1.get_text().strip()
 
-        # Save cleaned HTML (with CSS, rewritten img paths for local file viewing)
-        from src.builder import rewrite_image_paths, EPUB_CSS
-        assets_dir = output_dir / "assets"
-        cleaned_html = cleaned.html
-        if assets_dir.exists():
-            cleaned_html = cleaned_html.replace("images/", "assets/")
-            cleaned_html = rewrite_image_paths(cleaned_html, [cleaned], assets_dir, "assets/")
-        # Wrap in full HTML document with embedded CSS
-        cleaned_html = f"""<!DOCTYPE html>
+    # Save cleaned HTML (with CSS, rewritten img paths for local file viewing)
+    from src.builder import rewrite_image_paths, EPUB_CSS
+    assets_dir = output_dir / "assets"
+    cleaned_html = cleaned.html
+    if assets_dir.exists():
+        cleaned_html = cleaned_html.replace("images/", "assets/")
+        cleaned_html = rewrite_image_paths(cleaned_html, [cleaned], assets_dir, "assets/")
+    # Wrap in full HTML document with embedded CSS
+    cleaned_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 {EPUB_CSS}
 </style></head>
 {cleaned_html}
 </html>"""
-        cleaned_path = output_dir / "cleaned.html"
-        cleaned_path.write_text(cleaned_html, encoding="utf-8")
+    cleaned_path = output_dir / "cleaned.html"
+    cleaned_path.write_text(cleaned_html, encoding="utf-8")
 
-        # Build EPUB
-        from src.builder import build_epub
-        epub_path = output_dir / "test.epub"
-        build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir)
+    # Build EPUB
+    from src.builder import build_epub
+    epub_path = output_dir / "test.epub"
+    build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir)
 
-        # Print summary
-        print("\n=== Page Test Results ===")
-        print(f"Title:     {cleaned.chapter.title}")
-        print(f"Course:    {course_slug}")
-        print(f"Word count: {cleaned.word_count}")
-        print(f"Images:    {len(cleaned.images)} ({', '.join(a.filename for a in cleaned.images[:5])}{'...' if len(cleaned.images) > 5 else ''})")
-        print(f"Formulas:  {cleaned.formula_count}")
-        print(f"HTML size: {len(cleaned.html):,} chars")
-        print(f"Clean saved: {cleaned_path}")
-        print(f"EPUB saved: {epub_path}")
-        text_preview = cleaned.html[:200].replace("\n", " ")
-        print(f"\nPreview: {text_preview}...")
-        print("\n=== Done ===")
-
-    finally:
-        cleanup(pw, context)
+    # Print summary
+    print("\n=== Page Test Results ===")
+    print(f"Title:     {cleaned.chapter.title}")
+    print(f"Course:    {course_slug}")
+    print(f"Word count: {cleaned.word_count}")
+    print(f"Images:    {len(cleaned.images)} ({', '.join(a.filename for a in cleaned.images[:5])}{'...' if len(cleaned.images) > 5 else ''})")
+    print(f"Formulas:  {cleaned.formula_count}")
+    print(f"HTML size: {len(cleaned.html):,} chars")
+    print(f"Clean saved: {cleaned_path}")
+    print(f"EPUB saved: {epub_path}")
+    text_preview = cleaned.html[:200].replace("\n", " ")
+    print(f"\nPreview: {text_preview}...")
+    print("\n=== Done ===")
 
 
 def cmd_scrape(args: argparse.Namespace) -> None:
@@ -188,7 +187,6 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         # Build EPUB
         epub_filename = args.output_file or f"{course_slug}.epub"
         epub_path = output_dir / epub_filename
-        assets_dir = output_dir / "assets"
 
         cover_path = Path(args.cover) if args.cover else None
         build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path)
@@ -205,6 +203,19 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 
     finally:
         cleanup(pw, context)
+
+    cover_path = Path(args.cover) if args.cover else None
+    build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path)
+
+    print(f"\nEPUB saved to: {epub_path}")
+
+    # Final report
+    cached = sum(1 for p in scraped_pages if p.cached)
+    print(f"\n=== Final Report ===")
+    print(f"Total chapters:  {len(chapters)}")
+    print(f"Scraped:         {len(scraped_pages) - cached}")
+    print(f"From cache:      {cached}")
+    print(f"Failed/Skipped:  {len(chapters) - len(scraped_pages)}")
 
 
 def main():

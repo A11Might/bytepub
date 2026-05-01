@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import re
 import time
 from io import BytesIO
 from pathlib import Path
@@ -261,6 +262,36 @@ def _download_assets(
                 media_type = "image/png"
                 filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
                 local_path = assets_dir / filename
+            # Convert SVG to PNG for Kindle compatibility
+            if ext == ".svg":
+                try:
+                    render_page = page.context.new_page()
+                    # Embed SVG in HTML and render via browser (handles text wrapping in foreignObject)
+                    html = f"""<html><body style="margin:0;display:inline-block">
+                    {body.decode('utf-8')}
+                    </body></html>"""
+                    render_page.set_content(html, wait_until="load", timeout=5000)
+                    render_page.wait_for_timeout(300)
+                    # Set viewport to match SVG size to avoid clipping
+                    box = render_page.locator("svg").first.bounding_box()
+                    if box:
+                        vw = max(int(box["width"]) + 20, 800)
+                        vh = max(int(box["height"]) + 20, 600)
+                        render_page.set_viewport_size({"width": vw, "height": vh})
+                        # Re-get bounding box after viewport resize
+                        box = render_page.locator("svg").first.bounding_box()
+                    png_path = local_path.with_suffix(".png")
+                    render_page.screenshot(path=str(png_path), clip=box, timeout=10000)
+                    render_page.close()
+                    local_path = png_path
+                    ext = ".png"
+                    media_type = "image/png"
+                    filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
+                    body = png_path.read_bytes()
+                except Exception as e:
+                    logger.warning(f"  SVG→PNG failed for {filename}: {e}")
+                    if render_page and not render_page.is_closed():
+                        render_page.close()
             local_path.write_bytes(body)
             logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
 

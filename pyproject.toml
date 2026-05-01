@@ -7,6 +7,7 @@ dependencies = [
     "beautifulsoup4",
     "ebooklib",
     "lxml",
+    "cairosvg",
 ]
 
 [project.optional-dependencies]
