@@ -179,6 +179,9 @@ def _download_assets(
     assets = []
     counter = 0
 
+    # Get base URL for resolving relative paths
+    base_url = page.url
+
     images = page.query_selector_all("img")
     for img in images:
         src = img.get_attribute("src")
@@ -187,24 +190,38 @@ def _download_assets(
         if src.startswith("data:"):
             continue
 
-        counter += 1
-        ext = os.path.splitext(urlparse(src).path)[1].lower() or ".png"
+        # Resolve relative URLs to absolute
+        if src.startswith("/"):
+            parsed = urlparse(base_url)
+            full_url = f"{parsed.scheme}://{parsed.netloc}{src}"
+        elif not src.startswith("http"):
+            full_url = urljoin(base_url, src)
+        else:
+            full_url = src
+
+        # Strip query params for extension detection
+        path_without_query = urlparse(full_url).path
+        ext = os.path.splitext(path_without_query)[1].lower() or ".png"
         media_type = MIME_MAP.get(ext, "image/png")
+
+        counter += 1
         filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
         local_path = assets_dir / filename
 
         if not local_path.exists():
             try:
-                response = page.request.get(src)
+                response = page.request.get(full_url)
                 if response.ok:
                     local_path.write_bytes(response.body())
                     logger.info(f"  Downloaded: {filename}")
+                else:
+                    logger.warning(f"  Failed to download {full_url}: HTTP {response.status}")
             except Exception as e:
-                logger.warning(f"  Failed to download {src}: {e}")
+                logger.warning(f"  Failed to download {full_url}: {e}")
 
         assets.append(Asset(
             filename=filename,
-            original_url=src,
+            original_url=full_url,
             media_type=media_type,
         ))
 

@@ -104,9 +104,12 @@ def _process_images(content: Tag, chapter_index: int) -> list[Asset]:
         if not src:
             continue
         counter += 1
-        ext = os.path.splitext(urlparse(src).path)[1].lower() or ".png"
+        # Strip query params for extension detection
+        path_without_query = urlparse(src).path
+        ext = os.path.splitext(path_without_query)[1].lower() or ".png"
         filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
-        img["src"] = filename
+        # Use images/ prefix to match EPUB internal structure
+        img["src"] = f"images/{filename}"
         images.append(Asset(
             filename=filename,
             original_url=src,
