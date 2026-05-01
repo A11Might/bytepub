@@ -1,0 +1,18 @@
+[project]
+name = "web-to-epub"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright",
+    "beautifulsoup4",
+    "ebooklib",
+    "lxml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+web-to-epub = "src.cli:main"
