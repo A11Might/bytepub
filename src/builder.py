@@ -78,7 +78,17 @@ def build_epub(
             cover_image_path.read_bytes(),
         )
 
+    # CSS stylesheet for tables, headings, images
+    nav_css = epub.EpubItem(
+        uid="style",
+        file_name="style.css",
+        media_type="text/css",
+        content=EPUB_CSS,
+    )
+    book.add_item(nav_css)
+
     chapters = []
+    toc = []
     for page in pages:
         ch_num = page.chapter.index
 
@@ -141,16 +151,38 @@ def build_epub(
 
         html = _render_html(chapter_title, content)
         file_name = f"chapter_{len(chapters) + 1}.xhtml"
+
+        # Add h2 anchors and build sub-section TOC
+        sub_items = []
+        h2_counter = [0]
+
+        def _replace_h2(match):
+            h2_counter[0] += 1
+            anchor_id = f"sec{h2_counter[0]:02d}"
+            h2_content = match.group(1)
+            text = re.sub(r"<[^>]+>", "", h2_content).strip()
+            uid = f"chapter_{len(chapters) + 1}-s{h2_counter[0]:02d}"
+            sub_items.append(epub.Link(f"{file_name}#{anchor_id}", text, uid))
+            return f'<h2 id="{anchor_id}">{h2_content}</h2>'
+
+        html = re.sub(r"<h2(?:\s[^>]*)?>(.*?)</h2>", _replace_h2, html)
+
         chapter = epub.EpubHtml(
             title=chapter_title,
             file_name=file_name,
             lang="en",
         )
         chapter.content = html
+        chapter.add_item(nav_css)
         book.add_item(chapter)
         chapters.append(chapter)
 
-    book.toc = chapters
+        if sub_items:
+            toc.append((chapter, sub_items))
+        else:
+            toc.append(chapter)
+
+    book.toc = toc
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
     book.spine = ["nav"] + chapters
