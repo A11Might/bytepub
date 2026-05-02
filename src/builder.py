@@ -47,7 +47,6 @@ def _render_html(title: str, content: str) -> str:
 <h1>{title}</h1>
 
 {content}
-
 </body>
 </html>"""
 
@@ -147,8 +146,12 @@ def build_epub(
 
         # Extract title from h1
         m_title = re.search(r"<h1[^>]*>(.*?)</h1>", content)
-        chapter_title = re.sub(r"<[^>]+>", "", m_title.group(1)).strip() if m_title else page.chapter.title
+        raw_title = re.sub(r"<[^>]+>", "", m_title.group(1)).strip() if m_title else page.chapter.title
 
+        # Remove original h1 from content (template adds one with chapter number)
+        content = re.sub(r"<h1[^>]*>.*?</h1>", "", content, count=1, flags=re.DOTALL)
+
+        chapter_title = f"{ch_num}. {raw_title}"
         html = _render_html(chapter_title, content)
         file_name = f"chapter_{len(chapters) + 1}.xhtml"
 

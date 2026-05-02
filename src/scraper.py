@@ -84,7 +84,7 @@ def discover_chapters(context: BrowserContext, course_url: str) -> list[Chapter]
             full_url = f"https://bytebytego.com/courses/{course_slug}/{chapter_slug}"
             chapters.append(Chapter(
                 index=len(chapters) + 1,
-                title=f"{num} {title}" if num else title,
+                title=title,
                 url=full_url,
                 slug=chapter_slug,
             ))
