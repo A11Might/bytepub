@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ebooklib import epub
 
@@ -34,6 +35,37 @@ def rewrite_image_paths(html: str, pages: list[CleanedPage], assets_dir: Path, p
                 html = html.replace(f"{prefix}{bare}\"", f"{prefix}{actual_name}\"")
                 html = html.replace(f"{prefix}{bare}<", f"{prefix}{actual_name}<")
     return html
+
+
+def _extract_course_slug(pages: list[CleanedPage]) -> str | None:
+    """Extract course slug from chapter URLs."""
+    for page in pages:
+        parts = urlparse(page.chapter.url).path.strip("/").split("/")
+        if len(parts) >= 2 and parts[0] == "courses":
+            return parts[1]
+    return None
+
+
+def _build_slug_map(pages: list[CleanedPage]) -> dict[str, str]:
+    """Map chapter slugs to EPUB filenames (slug → chapter_N.xhtml)."""
+    return {page.chapter.slug: f"chapter_{i + 1}.xhtml" for i, page in enumerate(pages)}
+
+
+def _rewrite_internal_links(html: str, course_slug: str, slug_map: dict[str, str]) -> str:
+    """Rewrite /courses/{course}/{slug}#{anchor} links to chapter_N.xhtml#{anchor}."""
+    def _replace(m):
+        slug = m.group(1)
+        anchor = m.group(2) or ""
+        target = slug_map.get(slug)
+        if target:
+            return f'href="{target}{anchor}"'
+        return m.group(0)
+
+    return re.sub(
+        rf'href="/courses/{re.escape(course_slug)}/([^"#]+)(#[^"]*)?"',
+        _replace,
+        html,
+    )
 
 
 def _render_html(title: str, content: str) -> str:
@@ -86,6 +118,10 @@ def build_epub(
         content=EPUB_CSS,
     )
     book.add_item(nav_css)
+
+    # Build mapping for internal link rewriting
+    course_slug = _extract_course_slug(pages)
+    slug_map = _build_slug_map(pages) if course_slug else {}
 
     chapters = []
     toc = []
@@ -156,20 +192,27 @@ def build_epub(
         html = _render_html(chapter_title, content)
         file_name = f"chapter_{len(chapters) + 1}.xhtml"
 
-        # Add h2 anchors and build sub-section TOC
+        # Add h2 anchors and build sub-section TOC (preserve original IDs)
         sub_items = []
         h2_counter = [0]
 
         def _replace_h2(match):
             h2_counter[0] += 1
-            anchor_id = f"sec{h2_counter[0]:02d}"
-            h2_content = match.group(1)
+            attrs = match.group(1) or ""
+            h2_content = match.group(2)
+            # Keep the original ID if present, otherwise generate one
+            id_match = re.search(r'id="([^"]*)"', attrs)
+            anchor_id = id_match.group(1) if id_match else f"sec{h2_counter[0]:02d}"
             text = re.sub(r"<[^>]+>", "", h2_content).strip()
             uid = f"chapter_{len(chapters) + 1}-s{h2_counter[0]:02d}"
             sub_items.append(epub.Link(f"{file_name}#{anchor_id}", text, uid))
             return f'<h2 id="{anchor_id}">{h2_content}</h2>'
 
-        html = re.sub(r"<h2(?:\s[^>]*)?>(.*?)</h2>", _replace_h2, html)
+        html = re.sub(r"<h2(\s[^>]*)?>(.*?)</h2>", _replace_h2, html)
+
+        # Rewrite internal cross-chapter links
+        if course_slug:
+            html = _rewrite_internal_links(html, course_slug, slug_map)
 
         chapter = epub.EpubHtml(
             title=chapter_title,
