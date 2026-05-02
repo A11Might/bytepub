@@ -266,11 +266,13 @@ def _download_assets(
             if ext == ".svg":
                 try:
                     render_page = page.context.new_page()
-                    # Embed SVG in HTML and render via browser (handles text wrapping in foreignObject)
+                    # Remove external image references to avoid network timeouts
+                    import re
+                    svg_text = re.sub(r'<image[^>]*xlink:href="https?://[^"]*"[^>]*/?\s*>', '', body.decode('utf-8'))
                     html = f"""<html><body style="margin:0;display:inline-block">
-                    {body.decode('utf-8')}
+                    {svg_text}
                     </body></html>"""
-                    render_page.set_content(html, wait_until="load", timeout=5000)
+                    render_page.set_content(html, wait_until="domcontentloaded", timeout=10000)
                     render_page.wait_for_timeout(300)
                     # Set viewport to match SVG size to avoid clipping
                     box = render_page.locator("svg").first.bounding_box()
@@ -289,16 +291,19 @@ def _download_assets(
                     filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
                     body = png_path.read_bytes()
                 except Exception as e:
-                    logger.warning(f"  SVG→PNG failed for {filename}: {e}")
+                    logger.warning(f"  SVG→PNG failed for {filename}, skipping: {e}")
                     if render_page and not render_page.is_closed():
                         render_page.close()
-            local_path.write_bytes(body)
-            logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
+                    body = None
+            if body:
+                local_path.write_bytes(body)
+                logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
 
-        assets.append(Asset(
-            filename=filename,
-            original_url=full_url,
-            media_type=media_type,
-        ))
+        if body:
+            assets.append(Asset(
+                filename=filename,
+                original_url=full_url,
+                media_type=media_type,
+            ))
 
     return assets
