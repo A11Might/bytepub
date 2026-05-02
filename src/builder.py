@@ -14,6 +14,7 @@ table { border-collapse: collapse; margin: 1em 0; width: 100%; }
 th, td { border: 1px solid #999; padding: 0.4em 0.6em; text-align: left; }
 th { background-color: #f0f0f0; font-weight: bold; }
 img { max-width: 100%; height: auto; }
+ol { list-style-type: none; }
 """
 
 
@@ -187,7 +188,9 @@ def build_epub(
 
     book.toc = toc
     book.add_item(epub.EpubNcx())
-    book.add_item(epub.EpubNav())
+    nav = epub.EpubNav()
+    nav.add_item(nav_css)
+    book.add_item(nav)
     book.spine = ["nav"] + chapters
 
     epub.write_epub(str(output_path), book, {})
