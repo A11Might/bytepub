@@ -124,7 +124,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     try:
         # Discover chapters
         print(f"\nDiscovering chapters for: {course_slug}")
-        chapters = discover_chapters(context, url)
+        chapters = discover_chapters(context, url, output_dir)
         if not chapters:
             print("No chapters found. Check the URL and your access.")
             return

@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -46,9 +47,18 @@ def build_course_index_url(url: str, course_slug: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}/courses/{course_slug}"
 
 
-def discover_chapters(context: BrowserContext, course_url: str) -> list[Chapter]:
+def discover_chapters(context: BrowserContext, course_url: str, output_dir: Path | None = None) -> list[Chapter]:
     """Load a chapter page and extract all chapters from the sidebar menu."""
     course_slug = parse_course_url(course_url)
+
+    # Check cache
+    if output_dir:
+        cache_file = output_dir / "cache" / "chapters.json"
+        if cache_file.exists():
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            if data.get("course_slug") == course_slug:
+                logger.info(f"[cache hit] Chapter list for {course_slug}")
+                return [Chapter(**ch) for ch in data["chapters"]]
 
     page = context.new_page()
     try:
@@ -77,10 +87,6 @@ def discover_chapters(context: BrowserContext, course_url: str) -> list[Chapter]
             if not title:
                 continue
 
-            # Get chapter number from <i> inside the menu item
-            i_tag = item.query_selector("i")
-            num = i_tag.inner_text().strip() if i_tag else ""
-
             full_url = f"https://bytebytego.com/courses/{course_slug}/{chapter_slug}"
             chapters.append(Chapter(
                 index=len(chapters) + 1,
@@ -90,6 +96,15 @@ def discover_chapters(context: BrowserContext, course_url: str) -> list[Chapter]
             ))
     finally:
         page.close()
+
+    # Save cache
+    if output_dir:
+        cache_file = output_dir / "cache" / "chapters.json"
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps({
+            "course_slug": course_slug,
+            "chapters": [{"index": ch.index, "title": ch.title, "url": ch.url, "slug": ch.slug} for ch in chapters],
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return chapters
 
@@ -169,8 +184,8 @@ def fetch_all(
             logger.warning(f"Skipping chapter {chapter.index}: {e}")
             continue
 
-        # Rate limit between pages (not after last page)
-        if i < len(chapters) - 1:
+        # Rate limit between pages (only after actual fetch, not cache hits)
+        if i < len(chapters) - 1 and not scraped.cached:
             delay = random.uniform(delay_min, delay_max)
             logger.info(f"Waiting {delay:.1f}s before next page...")
             time.sleep(delay)
