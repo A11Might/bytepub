@@ -51,11 +51,11 @@ python3.11 -m src.cli scrape "https://bytebytego.com/courses/xxx/chapter-slug"
 
 ## 功能
 
-- **图片处理**：自动下载、检测真实格式、WebP 转 PNG、路径重写
-- **公式渲染**：从 KaTeX 提取 MathML，EPUB 原生支持
+- **图片处理**：自动下载、检测真实格式、WebP/SVG 转 PNG、路径重写
 - **表格样式**：自动添加边框和表头样式
-- **本地缓存**：HTML 和图片缓存到本地，支持断点续抓
-- **Session 持久化**：登录一次保存到 `output/.session.json`，下次自动加载
+- **本地缓存**：HTML、图片、章节列表缓存到本地，支持断点续抓
+- **Session 持久化**：浏览器数据持久化到 `output/.browser-data/`，Firebase refresh token 自动续期，无需频繁重新登录
+- **章节目录**：h1 带序号、h2 子标题嵌套目录、TOC 自动去除列表编号
 - **章节发现**：自动从侧边栏识别课程全部章节
 
 ## 免责声明
