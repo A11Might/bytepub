@@ -1,4 +1,6 @@
+import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Tag, NavigableString
 
@@ -176,10 +178,85 @@ def _mathml_to_md(tag: Tag) -> str:
     return "[formula]"
 
 
+def _rewrite_md_image_paths(md: str, assets_dir: Path) -> str:
+    """Rewrite image paths: images/chXX-NNN -> ../assets/chXX-NNN.png."""
+    if not assets_dir.exists():
+        return md
+    stem_to_actual = {f.stem: f.name for f in assets_dir.iterdir() if f.is_file()}
+
+    def _replace(m):
+        bare = m.group(1)
+        actual = stem_to_actual.get(bare)
+        if actual:
+            return f"](../assets/{actual})"
+        return m.group(0)
+
+    return re.sub(r"\]\(images/([^)]+)\)", _replace, md)
+
+
+def _extract_course_slug(pages: list[CleanedPage]) -> str | None:
+    """Extract course slug from chapter URLs."""
+    for page in pages:
+        parts = urlparse(page.chapter.url).path.strip("/").split("/")
+        if len(parts) >= 2 and parts[0] == "courses":
+            return parts[1]
+    return None
+
+
+def _build_slug_map(pages: list[CleanedPage]) -> dict[str, str]:
+    """Map chapter slugs to markdown filenames (slug -> chXX.md)."""
+    return {page.chapter.slug: f"ch{page.chapter.index:02d}.md" for page in pages}
+
+
+def _rewrite_md_links(md: str, course_slug: str, slug_map: dict[str, str], for_full: bool = False) -> str:
+    """Rewrite /courses/{course}/{slug}#{anchor} links to markdown equivalents.
+
+    For per-chapter files: rewrite to chXX.md#anchor.
+    For full.md: rewrite to #chapter-N anchors.
+    """
+    if for_full:
+        # Build slug -> chapter index map for full.md anchors
+        slug_to_idx = {}
+        for page in getattr(_rewrite_md_links, '_pages', []):
+            slug_to_idx[page.chapter.slug] = page.chapter.index
+
+        def _replace_full(m):
+            slug = m.group(1)
+            anchor = m.group(2) or ""
+            for page in _rewrite_md_links._pages:
+                if page.chapter.slug == slug:
+                    link = f"#chapter-{page.chapter.index}"
+                    if anchor:
+                        link += anchor
+                    return f"]({link})"
+            return m.group(0)
+
+        return re.sub(
+            rf"\]\(/courses/{re.escape(course_slug)}/([^#\"/]+)(#[^)\"]*)?\)",
+            _replace_full,
+            md,
+        )
+    else:
+        def _replace(m):
+            slug = m.group(1)
+            anchor = m.group(2) or ""
+            target = slug_map.get(slug)
+            if target:
+                return f"]({target}{anchor})"
+            return m.group(0)
+
+        return re.sub(
+            rf"\]\(/courses/{re.escape(course_slug)}/([^#\"/]+)(#[^)\"]*)?\)",
+            _replace,
+            md,
+        )
+
+
 def build_markdown(
     title: str,
     pages: list[CleanedPage],
     output_dir: Path,
+    assets_dir: Path | None = None,
 ) -> Path:
     """Build Markdown files from cleaned pages.
 
@@ -188,14 +265,27 @@ def build_markdown(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    chapter_contents: list[tuple[str, str]] = []  # (filename, content)
+    # Build slug map for cross-chapter link rewriting
+    course_slug = _extract_course_slug(pages)
+    slug_map = _build_slug_map(pages) if course_slug else {}
+
+    chapter_data: list[tuple[int, str, str]] = []  # (index, filename, base_md)
 
     for page in pages:
         ch_num = page.chapter.index
         md_content = html_to_markdown(page.html)
+        # Rewrite image paths (images/ -> ../assets/ with extension)
+        if assets_dir:
+            md_content = _rewrite_md_image_paths(md_content, assets_dir)
         filename = f"ch{ch_num:02d}.md"
-        (output_dir / filename).write_text(md_content, encoding="utf-8")
-        chapter_contents.append((filename, md_content))
+        # Save base content (images rewritten, links NOT yet rewritten)
+        chapter_data.append((ch_num, filename, md_content))
+
+        # Rewrite links for per-chapter file and write
+        ch_content = md_content
+        if course_slug:
+            ch_content = _rewrite_md_links(md_content, course_slug, slug_map, for_full=False)
+        (output_dir / filename).write_text(ch_content, encoding="utf-8")
 
     # Build merged full.md with TOC
     lines: list[str] = []
@@ -204,13 +294,22 @@ def build_markdown(
     lines.append("## Table of Contents")
     lines.append("")
     for i, page in enumerate(pages):
-        lines.append(f"{i + 1}. [{page.chapter.title}](ch{page.chapter.index:02d}.md)")
+        lines.append(f"{i + 1}. [{page.chapter.title}](#chapter-{page.chapter.index})")
     lines.append("")
     lines.append("---")
     lines.append("")
 
-    for filename, content in chapter_contents:
-        lines.append(content)
+    # Store pages for full.md link rewriting
+    _rewrite_md_links._pages = pages
+    for ch_num, filename, base_md in chapter_data:
+        lines.append(f'<a id="chapter-{ch_num}"></a>')
+        lines.append("")
+        # Rewrite links for full.md context (using base_md with original links)
+        if course_slug:
+            full_content = _rewrite_md_links(base_md, course_slug, slug_map, for_full=True)
+        else:
+            full_content = base_md
+        lines.append(full_content)
         lines.append("")
         lines.append("---")
         lines.append("")

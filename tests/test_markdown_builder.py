@@ -108,9 +108,10 @@ def _make_cleaned_page(
     title: str = "Chapter One",
     html: str = "<h1>Chapter One</h1><p>Hello world.</p>",
     images: list[Asset] | None = None,
+    slug: str | None = None,
 ) -> CleanedPage:
     return CleanedPage(
-        chapter=Chapter(index=index, title=title, url=f"https://example.com/courses/my-course/ch{index}", slug=f"ch{index}"),
+        chapter=Chapter(index=index, title=title, url=f"https://example.com/courses/my-course/ch{index}", slug=slug or f"ch{index}"),
         html=html,
         images=images or [],
     )
@@ -142,7 +143,7 @@ def test_build_markdown_creates_full_merged_file(tmp_path):
     assert "---" in content  # separator between chapters
 
 
-def test_build_markdown_full_has_toc(tmp_path):
+def test_build_markdown_full_has_toc_with_anchors(tmp_path):
     from src.markdown_builder import build_markdown
     pages = [
         _make_cleaned_page(1, "Introduction", "<h1>Introduction</h1><p>First.</p>"),
@@ -150,7 +151,12 @@ def test_build_markdown_full_has_toc(tmp_path):
     ]
     build_markdown("My Course", pages, tmp_path)
     content = (tmp_path / "full.md").read_text()
-    assert "1. Introduction" in content or "[Introduction]" in content
+    # TOC should link to internal anchors, not external files
+    assert "[Introduction](#chapter-1)" in content
+    assert "[Architecture](#chapter-2)" in content
+    # Chapter anchors should exist
+    assert '<a id="chapter-1"></a>' in content
+    assert '<a id="chapter-2"></a>' in content
 
 
 def test_build_markdown_chapter_content(tmp_path):
@@ -160,3 +166,41 @@ def test_build_markdown_chapter_content(tmp_path):
     ch1 = (tmp_path / "ch01.md").read_text()
     assert "# Test" in ch1
     assert "Some content." in ch1
+
+
+def test_build_markdown_rewrites_image_paths(tmp_path):
+    from src.markdown_builder import build_markdown
+    # Create a fake assets dir with a real image
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "ch01-001.png").write_bytes(b'\x89PNG\r\n\x1a\n' + b'\x00' * 10)
+
+    pages = [_make_cleaned_page(1, "Test", '<h1>Test</h1><p><img src="images/ch01-001" alt="Diagram"/></p>')]
+    build_markdown("My Course", pages, tmp_path, assets_dir=assets_dir)
+    ch1 = (tmp_path / "ch01.md").read_text()
+    # Image path should be rewritten to ../assets/ch01-001.png
+    assert "![Diagram](../assets/ch01-001.png)" in ch1
+
+
+def test_build_markdown_rewrites_cross_chapter_links(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [
+        _make_cleaned_page(1, "Intro", '<h1>Intro</h1><p>See <a href="/courses/my-course/ch2#section">Chapter 2</a></p>', slug="ch1"),
+        _make_cleaned_page(2, "Basics", "<h1>Basics</h1><p>Content.</p>", slug="ch2"),
+    ]
+    build_markdown("My Course", pages, tmp_path)
+    ch1 = (tmp_path / "ch01.md").read_text()
+    # Cross-chapter link should be rewritten to ch02.md#section
+    assert "[Chapter 2](ch02.md#section)" in ch1
+
+
+def test_build_markdown_full_rewrites_links_to_anchors(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [
+        _make_cleaned_page(1, "Intro", '<h1>Intro</h1><p>See <a href="/courses/my-course/ch2#section">Chapter 2</a></p>', slug="ch1"),
+        _make_cleaned_page(2, "Basics", "<h1>Basics</h1><p>Content.</p>", slug="ch2"),
+    ]
+    build_markdown("My Course", pages, tmp_path)
+    full = (tmp_path / "full.md").read_text()
+    # In full.md, links should point to internal anchors
+    assert "[Chapter 2](#chapter-2#section)" in full

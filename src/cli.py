@@ -86,7 +86,7 @@ def cmd_test(args: argparse.Namespace) -> None:
     if fmt in ("markdown", "all"):
         from src.markdown_builder import build_markdown
         md_dir = output_dir / "markdown"
-        md_path = build_markdown(cleaned.chapter.title, [cleaned], md_dir)
+        md_path = build_markdown(cleaned.chapter.title, [cleaned], md_dir, assets_dir=assets_dir)
         print(f"Markdown saved: {md_path}")
 
     # Print summary
@@ -205,7 +205,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
         if fmt in ("markdown", "all"):
             from src.markdown_builder import build_markdown
             md_dir = output_dir / "markdown"
-            md_path = build_markdown(course_slug.replace("-", " ").title(), cleaned_pages, md_dir)
+            md_path = build_markdown(course_slug.replace("-", " ").title(), cleaned_pages, md_dir, assets_dir=assets_dir)
             print(f"Markdown saved to: {md_path}")
 
         # Final report
