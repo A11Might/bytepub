@@ -5,8 +5,8 @@
 ## 安装
 
 ```bash
-pip install -e .
-playwright install chromium
+uv sync
+uv run playwright install chromium
 ```
 
 ## 使用
@@ -14,7 +14,7 @@ playwright install chromium
 ### 测试单页
 
 ```bash
-python3.11 -m src.cli test "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
+uv run bytepub test "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
 ```
 
 运行后在 `output/test/` 下生成：
@@ -33,10 +33,10 @@ output/test/
 
 ```bash
 # 免费章节
-python3.11 -m src.cli scrape "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
+uv run bytepub scrape "https://bytebytego.com/courses/xxx/chapter-slug" --no-auth
 
 # 需要登录（首次打开浏览器登录，之后自动复用 session）
-python3.11 -m src.cli scrape "https://bytebytego.com/courses/xxx/chapter-slug"
+uv run bytepub scrape "https://bytebytego.com/courses/xxx/chapter-slug"
 ```
 
 ### 常用选项
