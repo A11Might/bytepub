@@ -232,7 +232,7 @@ def _rewrite_md_links(md: str, course_slug: str, slug_map: dict[str, str], for_f
             return m.group(0)
 
         return re.sub(
-            rf"\]\(/courses/{re.escape(course_slug)}/([^#\"/]+)(#[^)\"]*)?\)",
+            rf"\]\(/courses/{re.escape(course_slug)}/([^#\")/]+)(#[^)\"]*)?\)",
             _replace_full,
             md,
         )
@@ -246,7 +246,7 @@ def _rewrite_md_links(md: str, course_slug: str, slug_map: dict[str, str], for_f
             return m.group(0)
 
         return re.sub(
-            rf"\]\(/courses/{re.escape(course_slug)}/([^#\"/]+)(#[^)\"]*)?\)",
+            rf"\]\(/courses/{re.escape(course_slug)}/([^#\")/]+)(#[^)\"]*)?\)",
             _replace,
             md,
         )
