@@ -97,3 +97,66 @@ def test_strips_unwanted_html():
     md = html_to_markdown(html)
     assert "<article>" not in md
     assert "<h1>" not in md
+
+
+from pathlib import Path
+from src.models import CleanedPage, Chapter, Asset
+
+
+def _make_cleaned_page(
+    index: int = 1,
+    title: str = "Chapter One",
+    html: str = "<h1>Chapter One</h1><p>Hello world.</p>",
+    images: list[Asset] | None = None,
+) -> CleanedPage:
+    return CleanedPage(
+        chapter=Chapter(index=index, title=title, url=f"https://example.com/courses/my-course/ch{index}", slug=f"ch{index}"),
+        html=html,
+        images=images or [],
+    )
+
+
+def test_build_markdown_creates_chapter_files(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [
+        _make_cleaned_page(1, "Intro", "<h1>Intro</h1><p>Welcome.</p>"),
+        _make_cleaned_page(2, "Basics", "<h1>Basics</h1><p>Let's start.</p>"),
+    ]
+    build_markdown("My Course", pages, tmp_path)
+    assert (tmp_path / "ch01.md").exists()
+    assert (tmp_path / "ch02.md").exists()
+
+
+def test_build_markdown_creates_full_merged_file(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [
+        _make_cleaned_page(1, "Intro", "<h1>Intro</h1><p>Welcome.</p>"),
+        _make_cleaned_page(2, "Basics", "<h1>Basics</h1><p>Let's start.</p>"),
+    ]
+    build_markdown("My Course", pages, tmp_path)
+    full = (tmp_path / "full.md")
+    assert full.exists()
+    content = full.read_text()
+    assert "# Intro" in content
+    assert "# Basics" in content
+    assert "---" in content  # separator between chapters
+
+
+def test_build_markdown_full_has_toc(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [
+        _make_cleaned_page(1, "Introduction", "<h1>Introduction</h1><p>First.</p>"),
+        _make_cleaned_page(2, "Architecture", "<h1>Architecture</h1><p>Second.</p>"),
+    ]
+    build_markdown("My Course", pages, tmp_path)
+    content = (tmp_path / "full.md").read_text()
+    assert "1. Introduction" in content or "[Introduction]" in content
+
+
+def test_build_markdown_chapter_content(tmp_path):
+    from src.markdown_builder import build_markdown
+    pages = [_make_cleaned_page(1, "Test", "<h1>Test</h1><p>Some content.</p>")]
+    build_markdown("My Course", pages, tmp_path)
+    ch1 = (tmp_path / "ch01.md").read_text()
+    assert "# Test" in ch1
+    assert "Some content." in ch1

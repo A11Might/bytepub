@@ -174,3 +174,47 @@ def _mathml_to_md(tag: Tag) -> str:
     if text:
         return f"${text}$"
     return "[formula]"
+
+
+def build_markdown(
+    title: str,
+    pages: list[CleanedPage],
+    output_dir: Path,
+) -> Path:
+    """Build Markdown files from cleaned pages.
+
+    Creates per-chapter files (ch01.md, ch02.md, ...) and a merged full.md.
+    Returns the path to full.md.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    chapter_contents: list[tuple[str, str]] = []  # (filename, content)
+
+    for page in pages:
+        ch_num = page.chapter.index
+        md_content = html_to_markdown(page.html)
+        filename = f"ch{ch_num:02d}.md"
+        (output_dir / filename).write_text(md_content, encoding="utf-8")
+        chapter_contents.append((filename, md_content))
+
+    # Build merged full.md with TOC
+    lines: list[str] = []
+    lines.append(f"# {title}")
+    lines.append("")
+    lines.append("## Table of Contents")
+    lines.append("")
+    for i, page in enumerate(pages):
+        lines.append(f"{i + 1}. [{page.chapter.title}](ch{page.chapter.index:02d}.md)")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    for filename, content in chapter_contents:
+        lines.append(content)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    full_path = output_dir / "full.md"
+    full_path.write_text("\n".join(lines), encoding="utf-8")
+    return full_path
