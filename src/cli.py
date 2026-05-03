@@ -75,21 +75,30 @@ def cmd_test(args: argparse.Namespace) -> None:
     cleaned_path = output_dir / "cleaned.html"
     cleaned_path.write_text(cleaned_html, encoding="utf-8")
 
-    # Build EPUB
-    from src.builder import build_epub
-    epub_path = output_dir / "test.epub"
-    build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir, cache_dir=output_dir)
+    # Build output based on format
+    fmt = args.format
+    if fmt in ("epub", "all"):
+        from src.builder import build_epub
+        epub_path = output_dir / "test.epub"
+        build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir, cache_dir=output_dir)
+        print(f"EPUB saved: {epub_path}")
+
+    if fmt in ("markdown", "all"):
+        from src.markdown_builder import build_markdown
+        md_dir = output_dir / "markdown"
+        md_path = build_markdown(cleaned.chapter.title, [cleaned], md_dir)
+        print(f"Markdown saved: {md_path}")
 
     # Print summary
     print("\n=== Page Test Results ===")
-    print(f"Title:     {cleaned.chapter.title}")
-    print(f"Course:    {course_slug}")
+    print(f"Title:      {cleaned.chapter.title}")
+    print(f"Course:     {course_slug}")
     print(f"Word count: {cleaned.word_count}")
-    print(f"Images:    {len(cleaned.images)} ({', '.join(a.filename for a in cleaned.images[:5])}{'...' if len(cleaned.images) > 5 else ''})")
-    print(f"Formulas:  {cleaned.formula_count}")
-    print(f"HTML size: {len(cleaned.html):,} chars")
+    print(f"Images:     {len(cleaned.images)} ({', '.join(a.filename for a in cleaned.images[:5])}{'...' if len(cleaned.images) > 5 else ''})")
+    print(f"Formulas:   {cleaned.formula_count}")
+    print(f"HTML size:  {len(cleaned.html):,} chars")
     print(f"Clean saved: {cleaned_path}")
-    print(f"EPUB saved: {epub_path}")
+    print(f"\nFormat:     {fmt}")
     text_preview = cleaned.html[:200].replace("\n", " ")
     print(f"\nPreview: {text_preview}...")
     print("\n=== Done ===")
@@ -184,14 +193,20 @@ def cmd_scrape(args: argparse.Namespace) -> None:
             cleaned_path = output_dir / f"ch{ch_num:02d}.html"
             cleaned_path.write_text(cleaned_html, encoding="utf-8")
 
-        # Build EPUB
-        epub_filename = args.output_file or f"{course_slug}.epub"
-        epub_path = output_dir / epub_filename
+        # Build output based on format
+        fmt = args.format
+        if fmt in ("epub", "all"):
+            epub_filename = args.output_file or f"{course_slug}.epub"
+            epub_path = output_dir / epub_filename
+            cover_path = Path(args.cover) if args.cover else None
+            build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path, cache_dir=output_dir)
+            print(f"\nEPUB saved to: {epub_path}")
 
-        cover_path = Path(args.cover) if args.cover else None
-        build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path, cache_dir=output_dir)
-
-        print(f"\nEPUB saved to: {epub_path}")
+        if fmt in ("markdown", "all"):
+            from src.markdown_builder import build_markdown
+            md_dir = output_dir / "markdown"
+            md_path = build_markdown(course_slug.replace("-", " ").title(), cleaned_pages, md_dir)
+            print(f"Markdown saved to: {md_path}")
 
         # Final report
         cached = sum(1 for p in scraped_pages if p.cached)
@@ -218,6 +233,8 @@ def main():
     test_parser.add_argument("--session", "-s", help="Session file path")
     test_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
     test_parser.add_argument("--no-auth", action="store_true", help="Skip authentication")
+    test_parser.add_argument("--format", choices=["epub", "markdown", "all"], default="epub",
+                              help="Output format: epub (default), markdown, or all")
 
     # Scrape mode
     scrape_parser = subparsers.add_parser("scrape", help="Scrape full course")
@@ -232,6 +249,8 @@ def main():
                                help="Refresh specific chapter numbers (no args = refresh all)")
     scrape_parser.add_argument("--delay-min", type=float, default=3.0, help="Min delay between pages (seconds)")
     scrape_parser.add_argument("--delay-max", type=float, default=8.0, help="Max delay between pages (seconds)")
+    scrape_parser.add_argument("--format", choices=["epub", "markdown", "all"], default="epub",
+                                help="Output format: epub (default), markdown, or all")
 
     args = parser.parse_args()
     if args.command == "test":
