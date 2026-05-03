@@ -45,8 +45,9 @@ uv run bytepub scrape "https://bytebytego.com/courses/xxx/chapter-slug"
 |------|------|
 | `--no-auth` | 跳过登录，仅抓取免费内容 |
 | `-o output` | 输出目录（默认 output） |
+| `--format epub/markdown/all` | 输出格式：`epub`（默认）、`markdown`、`all`（同时生成两种） |
 | `--refresh 1 3` | 重新抓取指定章节，不加编号则刷新全部 |
-| `--delay-min 3 --delay-max 8` | 页面间隔秒数 |
+| `--delay-min 3 --delay-max 8` | 页面间隔秒数（默认 3-8 秒） |
 | `--cover image.png` | 自定义封面图 |
 
 ## 功能
