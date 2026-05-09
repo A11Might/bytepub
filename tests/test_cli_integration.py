@@ -10,8 +10,6 @@ def _make_args(**overrides) -> argparse.Namespace:
     defaults = {
         "url": "https://example.com/courses/test-course/intro",
         "output": "output",
-        "session": None,
-        "cookies": None,
         "no_auth": True,
         "format": "markdown",
     }
@@ -36,7 +34,7 @@ def test_cmd_test_markdown_format(tmp_path):
     """cmd_test with --format markdown should call build_markdown, not build_epub."""
     args = _make_args(output=str(tmp_path), format="markdown")
 
-    with patch("src.cli.no_auth_session") as mock_auth, \
+    with patch("src.auth.no_auth") as mock_auth, \
          patch("src.scraper.parse_course_url", return_value="test-course"), \
          patch("src.scraper.fetch_page", return_value=_scraped_page()) as mock_fetch, \
          patch("src.auth.cleanup"):
@@ -58,7 +56,7 @@ def test_cmd_test_all_format(tmp_path):
     """cmd_test with --format all should produce both EPUB and Markdown."""
     args = _make_args(output=str(tmp_path), format="all")
 
-    with patch("src.cli.no_auth_session") as mock_auth, \
+    with patch("src.auth.no_auth") as mock_auth, \
          patch("src.scraper.parse_course_url", return_value="test-course"), \
          patch("src.scraper.fetch_page", return_value=_scraped_page()), \
          patch("src.auth.cleanup"):
@@ -77,7 +75,7 @@ def test_cmd_test_epub_format_no_markdown(tmp_path):
     """cmd_test with --format epub (default) should NOT create markdown dir."""
     args = _make_args(output=str(tmp_path), format="epub")
 
-    with patch("src.cli.no_auth_session") as mock_auth, \
+    with patch("src.auth.no_auth") as mock_auth, \
          patch("src.scraper.parse_course_url", return_value="test-course"), \
          patch("src.scraper.fetch_page", return_value=_scraped_page()), \
          patch("src.auth.cleanup"):

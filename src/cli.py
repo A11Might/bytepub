@@ -9,15 +9,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def no_auth_session():
-    """Launch browser without any authentication."""
-    from src.auth import no_auth as _no_auth
-    return _no_auth()
-
-
 def cmd_test(args: argparse.Namespace) -> None:
     """Single page test mode: scrape + clean one page, output summary."""
-    from src.auth import create_session, load_session, cleanup
+    from src.auth import authenticated_session, no_auth, cleanup
     from src.scraper import parse_course_url, fetch_page
     from src.cleaner import clean_page
     from src.models import Chapter
@@ -29,18 +23,10 @@ def cmd_test(args: argparse.Namespace) -> None:
     output_dir = Path(args.output) / "test"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auth — auto-save/load session from output/.session.json
-    session_path = Path(args.session) if args.session else Path("output/.session.json")
-    cookie_file = Path(args.cookies) if args.cookies else None
     if args.no_auth:
-        pw, context = no_auth_session()
-    elif session_path.exists():
-        print(f"Loading session from {session_path}")
-        pw, context = load_session(session_path)
-    elif cookie_file:
-        pw, context = create_session(cookie_file=cookie_file)
+        pw, context = no_auth()
     else:
-        pw, context = create_session()
+        pw, context = authenticated_session()
 
     try:
         chapter = Chapter(index=1, title="Test Page", url=url, slug=chapter_slug)
@@ -106,7 +92,7 @@ def cmd_test(args: argparse.Namespace) -> None:
 
 def cmd_scrape(args: argparse.Namespace) -> None:
     """Full course scrape: discover -> fetch -> clean -> build EPUB."""
-    from src.auth import create_session, load_session, cleanup
+    from src.auth import authenticated_session, no_auth, cleanup
     from src.scraper import parse_course_url, discover_chapters, fetch_all
     from src.cleaner import clean_page
     from src.builder import build_epub
@@ -117,18 +103,10 @@ def cmd_scrape(args: argparse.Namespace) -> None:
     output_dir = Path(args.output) / course_slug
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auth — auto-save/load session from output/.session.json
-    session_path = Path(args.session) if args.session else Path("output/.session.json")
-    cookie_file = Path(args.cookies) if args.cookies else None
     if args.no_auth:
-        pw, context = no_auth_session()
-    elif session_path.exists():
-        print(f"Loading session from {session_path}")
-        pw, context = load_session(session_path)
-    elif cookie_file:
-        pw, context = create_session(cookie_file=cookie_file)
+        pw, context = no_auth()
     else:
-        pw, context = create_session()
+        pw, context = authenticated_session()
 
     try:
         # Discover chapters
@@ -230,8 +208,6 @@ def main():
     test_parser = subparsers.add_parser("test", help="Test single page scraping")
     test_parser.add_argument("url", help="Chapter page URL to test")
     test_parser.add_argument("--output", "-o", default="output", help="Output directory")
-    test_parser.add_argument("--session", "-s", help="Session file path")
-    test_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
     test_parser.add_argument("--no-auth", action="store_true", help="Skip authentication")
     test_parser.add_argument("--format", choices=["epub", "markdown", "all"], default="epub",
                               help="Output format: epub (default), markdown, or all")
@@ -240,8 +216,6 @@ def main():
     scrape_parser = subparsers.add_parser("scrape", help="Scrape full course")
     scrape_parser.add_argument("url", help="Course index or chapter page URL")
     scrape_parser.add_argument("--output", "-o", default="output", help="Output directory")
-    scrape_parser.add_argument("--session", "-s", help="Session file path")
-    scrape_parser.add_argument("--cookies", "-c", help="Cookie string file (exported from browser)")
     scrape_parser.add_argument("--no-auth", action="store_true", help="Skip authentication")
     scrape_parser.add_argument("--output-file", help="EPUB filename (default: {course-slug}.epub)")
     scrape_parser.add_argument("--cover", help="Custom cover image path")
