@@ -56,7 +56,7 @@ uv run bytepub scrape "https://bytebytego.com/courses/xxx/chapter-slug"
 - **表格样式**：自动添加边框和表头样式
 - **本地缓存**：HTML、图片、章节列表缓存到本地，支持断点续抓
 - **自动登录复用**：浏览器数据持久化到 `output/.browser-data/`，首次运行登录后，后续自动复用 session（Firebase refresh token 自动续期，无需重复登录）
-- **章节目录**：h1 带序号、h2 子标题嵌套目录、TOC 自动去除列表编号
+- **章节目录**：h1 带序号、子标题嵌套目录（优先 h2，无 h2 时自动使用 h3）、TOC 自动去除列表编号
 - **章节发现**：自动从侧边栏识别课程全部章节
 
 ## 免责声明

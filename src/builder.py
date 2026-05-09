@@ -192,23 +192,26 @@ def build_epub(
         html = _render_html(chapter_title, content)
         file_name = f"chapter_{len(chapters) + 1}.xhtml"
 
-        # Add h2 anchors and build sub-section TOC (preserve original IDs)
+        # Add section anchors and build sub-section TOC (preserve original IDs)
+        # Use h2 if present, otherwise fall back to h3
         sub_items = []
-        h2_counter = [0]
+        sec_counter = [0]
+        has_h2 = bool(re.search(r"<h2(\s[^>]*)?>(.*?)</h2>", html))
 
-        def _replace_h2(match):
-            h2_counter[0] += 1
+        def _replace_section(match):
+            sec_counter[0] += 1
             attrs = match.group(1) or ""
-            h2_content = match.group(2)
+            sec_content = match.group(2)
             # Keep the original ID if present, otherwise generate one
             id_match = re.search(r'id="([^"]*)"', attrs)
-            anchor_id = id_match.group(1) if id_match else f"sec{h2_counter[0]:02d}"
-            text = re.sub(r"<[^>]+>", "", h2_content).strip()
-            uid = f"chapter_{len(chapters) + 1}-s{h2_counter[0]:02d}"
+            anchor_id = id_match.group(1) if id_match else f"sec{sec_counter[0]:02d}"
+            text = re.sub(r"<[^>]+>", "", sec_content).strip()
+            uid = f"chapter_{len(chapters) + 1}-s{sec_counter[0]:02d}"
             sub_items.append(epub.Link(f"{file_name}#{anchor_id}", text, uid))
-            return f'<h2 id="{anchor_id}">{h2_content}</h2>'
+            return f'<h2 id="{anchor_id}">{sec_content}</h2>'
 
-        html = re.sub(r"<h2(\s[^>]*)?>(.*?)</h2>", _replace_h2, html)
+        tag = "h2" if has_h2 else "h3"
+        html = re.sub(rf"<{tag}(\s[^>]*)?>(.*?)</{tag}>", _replace_section, html)
 
         # Rewrite internal cross-chapter links
         if course_slug:
