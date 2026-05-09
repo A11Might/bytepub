@@ -2,7 +2,7 @@ import zipfile
 from pathlib import Path
 from ebooklib import epub
 
-from src.builder import build_epub, generate_cover_svg
+from src.builder import build_epub
 from src.models import CleanedPage, Chapter, Asset
 
 
@@ -61,9 +61,3 @@ def test_build_epub_with_images(tmp_path):
     image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
     assert len(image_items) == 1
 
-
-def test_generate_cover_svg():
-    svg = generate_cover_svg("My Book", "A subtitle")
-    assert "<svg" in svg
-    assert "My Book" in svg
-    assert "A subtitle" in svg
