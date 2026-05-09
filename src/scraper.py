@@ -279,8 +279,15 @@ def _download_assets(
                 local_path = assets_dir / filename
             # Convert SVG to PNG for Kindle compatibility
             if ext == ".svg":
+                svg_ctx = None
                 try:
-                    render_page = page.context.new_page()
+                    # Use a temporary 2x DPR context for sharp rendering
+                    browser = page.context.browser
+                    svg_ctx = browser.new_context(
+                        device_scale_factor=2,
+                        viewport={"width": 800, "height": 600},
+                    )
+                    render_page = svg_ctx.new_page()
                     # Remove external image references to avoid network timeouts
                     import re
                     svg_text = re.sub(r'<image[^>]*xlink:href="https?://[^"]*"[^>]*/?\s*>', '', body.decode('utf-8'))
@@ -300,6 +307,8 @@ def _download_assets(
                     png_path = local_path.with_suffix(".png")
                     render_page.screenshot(path=str(png_path), clip=box, timeout=10000)
                     render_page.close()
+                    svg_ctx.close()
+                    svg_ctx = None
                     local_path = png_path
                     ext = ".png"
                     media_type = "image/png"
@@ -307,9 +316,8 @@ def _download_assets(
                     body = png_path.read_bytes()
                 except Exception as e:
                     logger.warning(f"  SVG→PNG failed for {filename}, skipping: {e}")
-                    if render_page and not render_page.is_closed():
-                        render_page.close()
-                    body = None
+                    if svg_ctx:
+                        svg_ctx.close()
             if body:
                 local_path.write_bytes(body)
                 logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
