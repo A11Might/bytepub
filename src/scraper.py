@@ -4,7 +4,6 @@ import os
 import random
 import re
 import time
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
