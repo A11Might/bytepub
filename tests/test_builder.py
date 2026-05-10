@@ -144,3 +144,41 @@ def test_convert_image_for_epub_svg_failure_falls_back():
     assert result_body is None
     assert result_type is None
 
+
+def test_build_epub_converts_svg_assets(tmp_path):
+    """SVG files in assets_dir are converted to PNG when embedded in EPUB."""
+    svg_data = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">'
+        b'<rect width="100" height="50" fill="blue"/></svg>'
+    )
+    img_path = tmp_path / "assets" / "ch01-001.svg"
+    img_path.parent.mkdir()
+    img_path.write_bytes(svg_data)
+
+    images = [Asset(filename="ch01-001", original_url="https://example.com/img.svg", media_type="")]
+    pages = [_make_cleaned_page(1, "SVG Test", '<h1>SVG Test</h1><img src="assets/ch01-001.svg"/>', images)]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output, assets_dir=tmp_path / "assets")
+    book = epub.read_epub(str(output))
+    image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
+    assert len(image_items) == 1
+    # Content should be PNG bytes (starts with PNG magic number)
+    assert image_items[0].content[:4] == b'\x89PNG'
+    # File name in EPUB should use .png extension
+    assert image_items[0].file_name.endswith(".png")
+
+
+def test_build_epub_skips_failed_svg_conversion(tmp_path):
+    """Broken SVG images are skipped (not embedded) in the EPUB."""
+    img_path = tmp_path / "assets" / "ch01-001.svg"
+    img_path.parent.mkdir()
+    img_path.write_bytes(b'\xff\xfe invalid')
+
+    images = [Asset(filename="ch01-001", original_url="https://example.com/img.svg", media_type="")]
+    pages = [_make_cleaned_page(1, "Broken SVG", '<h1>Broken SVG</h1><img src="assets/ch01-001.svg"/>', images)]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output, assets_dir=tmp_path / "assets")
+    book = epub.read_epub(str(output))
+    image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
+    assert len(image_items) == 0
+

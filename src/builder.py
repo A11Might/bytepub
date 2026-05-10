@@ -242,11 +242,19 @@ def build_epub(
                 filename = match.group(1)
                 local_path = assets_dir / filename
                 if local_path.exists():
+                    raw_body = local_path.read_bytes()
+                    ext = local_path.suffix.lower()
+                    converted_body, media_type = _convert_image_for_epub(raw_body, ext)
+                    if converted_body is None:
+                        logger.warning(f"  Skipping image {filename}: conversion failed")
+                        continue
+                    # Use .png extension if format was converted
+                    epub_filename = filename if ext in (".png", ".jpg", ".jpeg", ".gif") else f"{local_path.stem}.png"
                     img_item = epub.EpubImage()
-                    img_item.file_name = f"images/{filename}"
-                    img_item.content = local_path.read_bytes()
+                    img_item.file_name = f"images/{epub_filename}"
+                    img_item.content = converted_body
                     book.add_item(img_item)
-                    content = content.replace(f"assets/{filename}", f"images/{filename}")
+                    content = content.replace(f"assets/{filename}", f"images/{epub_filename}")
 
         # Also handle images/ paths (from cleaner direct output)
         if assets_dir and assets_dir.exists():
@@ -258,12 +266,20 @@ def build_epub(
                 if not actual:
                     return m.group(0)
                 local_path = assets_dir / actual
+                epub_filename = actual  # default
                 if local_path.exists():
+                    raw_body = local_path.read_bytes()
+                    ext = local_path.suffix.lower()
+                    converted_body, media_type = _convert_image_for_epub(raw_body, ext)
+                    if converted_body is None:
+                        logger.warning(f"  Skipping image {actual}: conversion failed")
+                        return m.group(0)
+                    epub_filename = actual if ext in (".png", ".jpg", ".jpeg", ".gif") else f"{local_path.stem}.png"
                     img_item = epub.EpubImage()
-                    img_item.file_name = f"images/{actual}"
-                    img_item.content = local_path.read_bytes()
+                    img_item.file_name = f"images/{epub_filename}"
+                    img_item.content = converted_body
                     book.add_item(img_item)
-                return f'src="images/{actual}"'
+                return f'src="images/{epub_filename}"'
 
             content = re.sub(r'\bsrc="images/([^"]*)"', _replace_img, content)
 
