@@ -200,7 +200,7 @@ def test_build_epub_with_existing_png_still_works(tmp_path):
     assert image_items[0].content == png_data
 
 
-def test_epub_css_contains_special_styles(tmp_path):
+def test_epub_css_contains_special_styles():
     """EPUB stylesheet includes rules for info-box, sample-dialogue, and hljs."""
     from src.builder import EPUB_CSS
     assert ".info-box" in EPUB_CSS
