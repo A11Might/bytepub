@@ -123,16 +123,10 @@ th { background-color: #f0f0f0; font-weight: bold; }
 img { max-width: 100%; height: auto; }
 ol { list-style-type: none; }
 .info-box {
-    border-left: 4px solid #4a90d9;
-    background-color: #f0f4f8;
+    border-left: 4px solid #2a8a2a;
+    background-color: #f5f5f5;
     padding: 0.8em 1em;
     margin: 1em 0;
-}
-.info-box img {
-    width: 20px;
-    height: 20px;
-    vertical-align: middle;
-    margin-right: 0.3em;
 }
 .sample-dialogue {
     border: 1px solid #bbb;

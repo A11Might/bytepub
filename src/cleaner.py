@@ -150,7 +150,12 @@ def _process_images(content: Tag, chapter_index: int) -> list[Asset]:
 
 
 def _process_styles(content: Tag) -> None:
-    """Replace problematic Unicode characters with EPUB-safe alternatives."""
+    """Apply EPUB compatibility transforms: emoji replacement, structure cleanup."""
+    # Replace problematic emoji with text alternatives
     for text_node in content.find_all(string=True):
         if isinstance(text_node, NavigableString) and "✅" in text_node:
             text_node.replace_with(text_node.replace("✅", "[√]"))
+    # Remove icon images from info-box (styling handled by CSS alone)
+    for box in content.find_all(class_="info-box"):
+        for img in box.find_all("img"):
+            img.decompose()

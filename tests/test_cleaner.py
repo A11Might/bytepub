@@ -91,3 +91,5 @@ def test_preserves_info_box_and_sample_dialogue_structure():
     assert 'class="sample-dialogue"' in result.html
     assert "Be careful." in result.html
     assert "Anne:" in result.html
+    # info-box icon images are removed
+    assert "<img" not in result.html or "tip.svg" not in result.html
