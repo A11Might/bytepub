@@ -2,7 +2,7 @@ import os
 import re
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from src.models import Asset, CleanedPage, ScrapedPage
 
@@ -52,6 +52,7 @@ def clean_page(
     _remove_unwanted(content)
     formula_count = _process_formulas(content)
     images = _process_images(content, scraped.chapter.index)
+    _process_styles(content)
     word_count = len(content.get_text().split())
 
     return CleanedPage(
@@ -146,3 +147,10 @@ def _process_images(content: Tag, chapter_index: int) -> list[Asset]:
             media_type="",
         ))
     return images
+
+
+def _process_styles(content: Tag) -> None:
+    """Replace problematic Unicode characters with EPUB-safe alternatives."""
+    for text_node in content.find_all(string=True):
+        if isinstance(text_node, NavigableString) and "✅" in text_node:
+            text_node.replace_with(text_node.replace("✅", "[√]"))

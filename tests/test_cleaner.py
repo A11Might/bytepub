@@ -67,3 +67,27 @@ def test_handles_no_content_selector_match():
     page = _make_scraped(html)
     result = clean_page(page)
     assert "No article tag here" in result.html
+
+
+def test_replaces_emoji_with_text():
+    html = '<html><body><article><p>✅ <strong>What to do:</strong></p><p>No emoji here.</p></article></body></html>'
+    page = _make_scraped(html)
+    result = clean_page(page)
+    assert "✅" not in result.html
+    assert "[√]" in result.html
+    assert "No emoji here." in result.html
+
+
+def test_preserves_info_box_and_sample_dialogue_structure():
+    html = (
+        '<html><body><article>'
+        '<div class="info-box"><img src="https://example.com/tip.svg"/><p><strong>Tip:</strong> Be careful.</p></div>'
+        '<div class="sample-dialogue"><p><strong>Anne:</strong> Hello.</p></div>'
+        '</article></body></html>'
+    )
+    page = _make_scraped(html)
+    result = clean_page(page)
+    assert 'class="info-box"' in result.html
+    assert 'class="sample-dialogue"' in result.html
+    assert "Be careful." in result.html
+    assert "Anne:" in result.html
