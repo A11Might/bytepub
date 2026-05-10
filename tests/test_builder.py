@@ -199,3 +199,28 @@ def test_build_epub_with_existing_png_still_works(tmp_path):
     assert len(image_items) == 1
     assert image_items[0].content == png_data
 
+
+def test_epub_css_contains_special_styles(tmp_path):
+    """EPUB stylesheet includes rules for info-box, sample-dialogue, and hljs."""
+    from src.builder import EPUB_CSS
+    assert ".info-box" in EPUB_CSS
+    assert ".sample-dialogue" in EPUB_CSS
+    assert "pre" in EPUB_CSS
+    assert ".hljs-keyword" in EPUB_CSS
+    assert ".hljs-comment" in EPUB_CSS
+    assert ".hljs-string" in EPUB_CSS
+
+
+def test_epub_embeds_css_in_chapters(tmp_path):
+    """Built EPUB chapters reference the stylesheet with special styles."""
+    pages = [_make_cleaned_page(1, "Styled", '<h1>Styled</h1><div class="info-box"><p>Tip</p></div>')]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output)
+    book = epub.read_epub(str(output))
+    # Find the CSS item
+    css_items = [i for i in book.get_items() if hasattr(i, 'file_name') and i.file_name == "style.css"]
+    assert len(css_items) == 1
+    css_content = css_items[0].content.decode("utf-8")
+    assert ".info-box" in css_content
+    assert ".sample-dialogue" in css_content
+

@@ -122,6 +122,70 @@ th, td { border: 1px solid #999; padding: 0.4em 0.6em; text-align: left; }
 th { background-color: #f0f0f0; font-weight: bold; }
 img { max-width: 100%; height: auto; }
 ol { list-style-type: none; }
+.info-box {
+    border-left: 4px solid #4a90d9;
+    background-color: #f0f4f8;
+    padding: 0.8em 1em;
+    margin: 1em 0;
+}
+.info-box img {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    margin-right: 0.3em;
+}
+.sample-dialogue {
+    border: 1px solid #bbb;
+    background-color: #f5f5f5;
+    padding: 0.8em 1em;
+    margin: 1em 0;
+}
+.sample-dialogue p {
+    margin: 0.3em 0;
+}
+pre {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    padding: 0.8em 1em;
+    margin: 1em 0;
+    overflow-x: auto;
+    font-family: monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+    white-space: pre;
+}
+code {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+}
+.hljs-keyword, .hljs-built_in {
+    font-weight: bold;
+    color: #1a3a6b;
+}
+.hljs-comment {
+    color: #888;
+    font-style: italic;
+}
+.hljs-string {
+    color: #2a6a2a;
+}
+.hljs-type {
+    color: #5a2a7a;
+}
+.hljs-title {
+    color: #6b4a1a;
+}
+.hljs-meta {
+    color: #888;
+}
+.hljs-params {
+    color: inherit;
+}
 """
 
 
