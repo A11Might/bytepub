@@ -66,7 +66,7 @@ def cmd_test(args: argparse.Namespace) -> None:
     if fmt in ("epub", "all"):
         from src.builder import build_epub
         epub_path = output_dir / "test.epub"
-        build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir, cache_dir=output_dir)
+        build_epub(course_slug.replace("-", " ").title(), [cleaned], epub_path, assets_dir, cache_dir=output_dir, browser_context=context)
         print(f"EPUB saved: {epub_path}")
 
     if fmt in ("markdown", "all"):
@@ -177,7 +177,7 @@ def cmd_scrape(args: argparse.Namespace) -> None:
             epub_filename = args.output_file or f"{course_slug}.epub"
             epub_path = output_dir / epub_filename
             cover_path = Path(args.cover) if args.cover else None
-            build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path, cache_dir=output_dir)
+            build_epub(course_slug.replace("-", " ").title(), cleaned_pages, epub_path, assets_dir, cover_path, cache_dir=output_dir, browser_context=context)
             print(f"\nEPUB saved to: {epub_path}")
 
         if fmt in ("markdown", "all"):
