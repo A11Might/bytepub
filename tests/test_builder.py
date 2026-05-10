@@ -61,3 +61,27 @@ def test_build_epub_with_images(tmp_path):
     image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
     assert len(image_items) == 1
 
+
+import pytest
+
+
+def test_convert_svg_to_png_returns_png_bytes(tmp_path):
+    """SVG bytes are converted to PNG bytes."""
+    from src.builder import _convert_svg_to_png
+
+    svg_data = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">'
+        b'<rect width="100" height="50" fill="blue"/></svg>'
+    )
+    result = _convert_svg_to_png(svg_data)
+    assert result is not None
+    assert result[:4] == b'\x89PNG'
+
+
+def test_convert_svg_to_png_returns_none_on_failure():
+    """Invalid SVG returns None instead of raising."""
+    from src.builder import _convert_svg_to_png
+
+    result = _convert_svg_to_png(b'\xff\xfe invalid utf-8 bytes')
+    assert result is None
+

@@ -1,10 +1,57 @@
+import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
 
 from ebooklib import epub
 
 from src.models import CleanedPage
+
+logger = logging.getLogger(__name__)
+
+
+def _convert_svg_to_png(svg_data: bytes) -> bytes | None:
+    """Render SVG to PNG at 2x device scale factor using Playwright.
+
+    Returns PNG bytes, or None if conversion fails.
+    """
+    from playwright.sync_api import sync_playwright
+
+    try:
+        svg_text = re.sub(
+            r'<image[^>]*xlink:href="https?://[^"]*"[^>]*/?\s*>',
+            '',
+            svg_data.decode('utf-8'),
+        )
+        html = f"""<html><body style="margin:0;display:inline-block">
+        {svg_text}
+        </body></html>"""
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            ctx = browser.new_context(
+                device_scale_factor=2,
+                viewport={"width": 800, "height": 600},
+            )
+            page = ctx.new_page()
+            page.set_content(html, wait_until="domcontentloaded", timeout=10000)
+            page.wait_for_timeout(300)
+            box = page.locator("svg").first.bounding_box()
+            if box:
+                vw = max(int(box["width"]) + 20, 800)
+                vh = max(int(box["height"]) + 20, 600)
+                page.set_viewport_size({"width": vw, "height": vh})
+                box = page.locator("svg").first.bounding_box()
+            png_bytes = page.screenshot(clip=box, timeout=10000)
+            page.close()
+            ctx.close()
+            browser.close()
+        return png_bytes
+    except Exception as e:
+        logger.warning(f"SVG→PNG conversion failed: {e}")
+        return None
+
 
 # Used by cli.py for saving intermediate HTML files
 EPUB_CSS = """\
