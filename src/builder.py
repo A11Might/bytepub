@@ -448,7 +448,8 @@ def build_epub(
     if _own_browser and svg_ctx:
         svg_ctx.close()
         _browser.close()
-        _pw.stop()
+        if not pw:
+            _pw.stop()
 
     epub.write_epub(str(output_path), book, {})
     return output_path
