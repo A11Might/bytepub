@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import random
-import re
 import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse

@@ -11,13 +11,19 @@ from src.models import CleanedPage
 logger = logging.getLogger(__name__)
 
 
-def _convert_svg_to_png(svg_data: bytes) -> bytes | None:
+def _convert_svg_to_png(svg_data: bytes, ctx=None) -> bytes | None:
     """Render SVG to PNG at 2x device scale factor using Playwright.
+
+    Args:
+        svg_data: Raw SVG bytes.
+        ctx: Optional existing Playwright BrowserContext (reused across calls).
+             If None, a new browser is launched and closed per call.
 
     Returns PNG bytes, or None if conversion fails.
     """
     from playwright.sync_api import sync_playwright
 
+    own_browser = False
     try:
         svg_text = re.sub(
             r'<image[^>]*xlink:href="https?://[^"]*"[^>]*/?\s*>',
@@ -28,13 +34,17 @@ def _convert_svg_to_png(svg_data: bytes) -> bytes | None:
         {svg_text}
         </body></html>"""
 
-        with sync_playwright() as pw:
+        if ctx is None:
+            pw = sync_playwright().start()
             browser = pw.chromium.launch()
             ctx = browser.new_context(
                 device_scale_factor=2,
                 viewport={"width": 800, "height": 600},
             )
-            page = ctx.new_page()
+            own_browser = True
+
+        page = ctx.new_page()
+        try:
             page.set_content(html, wait_until="domcontentloaded", timeout=10000)
             page.wait_for_timeout(300)
             box = page.locator("svg").first.bounding_box()
@@ -44,17 +54,27 @@ def _convert_svg_to_png(svg_data: bytes) -> bytes | None:
                 page.set_viewport_size({"width": vw, "height": vh})
                 box = page.locator("svg").first.bounding_box()
             png_bytes = page.screenshot(clip=box, timeout=10000)
+        finally:
             page.close()
+
+        if own_browser:
             ctx.close()
             browser.close()
+            pw.stop()
+
         return png_bytes
     except Exception as e:
         logger.warning(f"SVG→PNG conversion failed: {e}")
         return None
 
 
-def _convert_image_for_epub(body: bytes, ext: str) -> tuple[bytes | None, str | None]:
+def _convert_image_for_epub(body: bytes, ext: str, ctx=None) -> tuple[bytes | None, str | None]:
     """Convert image bytes to an EPUB-compatible format if needed.
+
+    Args:
+        body: Raw image bytes.
+        ext: File extension (e.g. ".svg", ".webp", ".png").
+        ctx: Optional Playwright BrowserContext for SVG rendering reuse.
 
     Returns (converted_body, media_type). PNG/JPG/JPEG/GIF pass through
     unchanged. WebP is converted to PNG via Pillow. SVG is rendered to
@@ -83,7 +103,7 @@ def _convert_image_for_epub(body: bytes, ext: str) -> tuple[bytes | None, str | 
             return body, "image/webp"
 
     if ext == ".svg":
-        png_bytes = _convert_svg_to_png(body)
+        png_bytes = _convert_svg_to_png(body, ctx=ctx)
         if png_bytes:
             return png_bytes, "image/png"
         return None, None
@@ -209,6 +229,19 @@ def build_epub(
     course_slug = _extract_course_slug(pages)
     slug_map = _build_slug_map(pages) if course_slug else {}
 
+    # Launch a shared browser context for SVG conversions (reused across all images)
+    svg_ctx = None
+    if assets_dir and assets_dir.exists():
+        has_svgs = any(f.suffix.lower() == ".svg" for f in assets_dir.iterdir() if f.is_file())
+        if has_svgs:
+            from playwright.sync_api import sync_playwright
+            _pw = sync_playwright().start()
+            _browser = _pw.chromium.launch()
+            svg_ctx = _browser.new_context(
+                device_scale_factor=2,
+                viewport={"width": 800, "height": 600},
+            )
+
     chapters = []
     toc = []
     for page in pages:
@@ -244,7 +277,7 @@ def build_epub(
                 if local_path.exists():
                     raw_body = local_path.read_bytes()
                     ext = local_path.suffix.lower()
-                    converted_body, media_type = _convert_image_for_epub(raw_body, ext)
+                    converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
                     if converted_body is None:
                         logger.warning(f"  Skipping image {filename}: conversion failed")
                         continue
@@ -270,7 +303,7 @@ def build_epub(
                 if local_path.exists():
                     raw_body = local_path.read_bytes()
                     ext = local_path.suffix.lower()
-                    converted_body, media_type = _convert_image_for_epub(raw_body, ext)
+                    converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
                     if converted_body is None:
                         logger.warning(f"  Skipping image {actual}: conversion failed")
                         return m.group(0)
@@ -340,6 +373,12 @@ def build_epub(
     nav.add_item(nav_css)
     book.add_item(nav)
     book.spine = ["nav"] + chapters
+
+    # Clean up shared browser context
+    if svg_ctx:
+        svg_ctx.close()
+        _browser.close()
+        _pw.stop()
 
     epub.write_epub(str(output_path), book, {})
     return output_path
