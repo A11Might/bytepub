@@ -182,3 +182,20 @@ def test_build_epub_skips_failed_svg_conversion(tmp_path):
     image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
     assert len(image_items) == 0
 
+
+def test_build_epub_with_existing_png_still_works(tmp_path):
+    """Legacy cached PNG files still work without conversion."""
+    png_data = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100
+    img_path = tmp_path / "assets" / "ch01-001.png"
+    img_path.parent.mkdir()
+    img_path.write_bytes(png_data)
+
+    images = [Asset(filename="ch01-001", original_url="https://example.com/img.png", media_type="")]
+    pages = [_make_cleaned_page(1, "PNG Test", '<h1>PNG Test</h1><img src="assets/ch01-001.png"/>', images)]
+    output = tmp_path / "test.epub"
+    build_epub("Test Book", pages, output, assets_dir=tmp_path / "assets")
+    book = epub.read_epub(str(output))
+    image_items = [i for i in book.get_items() if isinstance(i, epub.EpubImage)]
+    assert len(image_items) == 1
+    assert image_items[0].content == png_data
+
