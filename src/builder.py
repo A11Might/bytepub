@@ -123,7 +123,7 @@ th { background-color: #f0f0f0; font-weight: bold; }
 img { max-width: 100%; height: auto; }
 ol { list-style-type: none; }
 .info-box {
-    border-left: 4px solid #2a8a2a;
+    border-left: 4px solid #4caf50;
     background-color: #f5f5f5;
     padding: 0.8em 1em;
     margin: 1em 0;
