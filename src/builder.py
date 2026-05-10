@@ -255,7 +255,7 @@ def build_epub(
     assets_dir: Path | None = None,
     cover_image_path: Path | None = None,
     cache_dir: Path | None = None,
-    browser_context=None,
+    pw=None,
 ) -> Path:
     """Build EPUB from saved HTML chapter files.
 
@@ -291,19 +291,26 @@ def build_epub(
     # Launch a shared browser context for SVG conversions (reused across all images)
     svg_ctx = None
     _own_browser = False
-    if browser_context:
-        svg_ctx = browser_context
-    elif assets_dir and assets_dir.exists():
+    if assets_dir and assets_dir.exists():
         has_svgs = any(f.suffix.lower() == ".svg" for f in assets_dir.iterdir() if f.is_file())
         if has_svgs:
-            from playwright.sync_api import sync_playwright
-            _pw = sync_playwright().start()
-            _browser = _pw.chromium.launch()
-            svg_ctx = _browser.new_context(
-                device_scale_factor=2,
-                viewport={"width": 800, "height": 600},
-            )
-            _own_browser = True
+            if pw:
+                # Reuse existing Playwright instance (from scraper) with 2x scale
+                _browser = pw.chromium.launch()
+                svg_ctx = _browser.new_context(
+                    device_scale_factor=2,
+                    viewport={"width": 800, "height": 600},
+                )
+                _own_browser = True
+            else:
+                from playwright.sync_api import sync_playwright
+                _pw = sync_playwright().start()
+                _browser = _pw.chromium.launch()
+                svg_ctx = _browser.new_context(
+                    device_scale_factor=2,
+                    viewport={"width": 800, "height": 600},
+                )
+                _own_browser = True
 
     chapters = []
     toc = []
