@@ -266,61 +266,8 @@ def _download_assets(
         local_path = assets_dir / filename
 
         if body and not local_path.exists():
-            # Convert WebP to PNG for EPUB compatibility
-            if ext == ".webp":
-                from PIL import Image
-                img = Image.open(BytesIO(body))
-                png_buf = BytesIO()
-                img.save(png_buf, format="PNG")
-                body = png_buf.getvalue()
-                ext = ".png"
-                media_type = "image/png"
-                filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
-                local_path = assets_dir / filename
-            # Convert SVG to PNG for Kindle compatibility
-            if ext == ".svg":
-                svg_ctx = None
-                try:
-                    # Use a temporary 2x DPR context for sharp rendering
-                    browser = page.context.browser
-                    svg_ctx = browser.new_context(
-                        device_scale_factor=2,
-                        viewport={"width": 800, "height": 600},
-                    )
-                    render_page = svg_ctx.new_page()
-                    # Remove external image references to avoid network timeouts
-                    import re
-                    svg_text = re.sub(r'<image[^>]*xlink:href="https?://[^"]*"[^>]*/?\s*>', '', body.decode('utf-8'))
-                    html = f"""<html><body style="margin:0;display:inline-block">
-                    {svg_text}
-                    </body></html>"""
-                    render_page.set_content(html, wait_until="domcontentloaded", timeout=10000)
-                    render_page.wait_for_timeout(300)
-                    # Set viewport to match SVG size to avoid clipping
-                    box = render_page.locator("svg").first.bounding_box()
-                    if box:
-                        vw = max(int(box["width"]) + 20, 800)
-                        vh = max(int(box["height"]) + 20, 600)
-                        render_page.set_viewport_size({"width": vw, "height": vh})
-                        # Re-get bounding box after viewport resize
-                        box = render_page.locator("svg").first.bounding_box()
-                    png_path = local_path.with_suffix(".png")
-                    render_page.screenshot(path=str(png_path), clip=box, timeout=10000)
-                    render_page.close()
-                    svg_ctx.close()
-                    svg_ctx = None
-                    local_path = png_path
-                    ext = ".png"
-                    media_type = "image/png"
-                    filename = f"ch{chapter_index:02d}-{counter:03d}{ext}"
-                    body = png_path.read_bytes()
-                except Exception as e:
-                    logger.warning(f"  SVG→PNG failed for {filename}, skipping: {e}")
-                    if svg_ctx:
-                        svg_ctx.close()
-            if body:
-                local_path.write_bytes(body)
-                logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
+            local_path.write_bytes(body)
+            logger.info(f"  Downloaded: {filename} ({len(body):,} bytes, {media_type})")
 
         if body:
             assets.append(Asset(
