@@ -53,6 +53,45 @@ def _convert_svg_to_png(svg_data: bytes) -> bytes | None:
         return None
 
 
+def _convert_image_for_epub(body: bytes, ext: str) -> tuple[bytes | None, str | None]:
+    """Convert image bytes to an EPUB-compatible format if needed.
+
+    Returns (converted_body, media_type). PNG/JPG/JPEG/GIF pass through
+    unchanged. WebP is converted to PNG via Pillow. SVG is rendered to
+    PNG via Playwright at 2x DPR.
+
+    Returns (None, None) if conversion fails and fallback is not possible.
+    """
+    if ext in (".png", ".jpg", ".jpeg", ".gif"):
+        mime = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+        }[ext]
+        return body, mime
+
+    if ext == ".webp":
+        try:
+            from PIL import Image
+            img = Image.open(BytesIO(body))
+            png_buf = BytesIO()
+            img.save(png_buf, format="PNG")
+            return png_buf.getvalue(), "image/png"
+        except Exception as e:
+            logger.warning(f"WebP→PNG conversion failed: {e}")
+            return body, "image/webp"
+
+    if ext == ".svg":
+        png_bytes = _convert_svg_to_png(body)
+        if png_bytes:
+            return png_bytes, "image/png"
+        return None, None
+
+    # Unknown format — try to pass through as PNG
+    return body, "image/png"
+
+
 # Used by cli.py for saving intermediate HTML files
 EPUB_CSS = """\
 body { font-family: sans-serif; line-height: 1.6; }

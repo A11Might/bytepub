@@ -85,3 +85,62 @@ def test_convert_svg_to_png_returns_none_on_failure():
     result = _convert_svg_to_png(b'\xff\xfe invalid utf-8 bytes')
     assert result is None
 
+
+def test_convert_image_for_epub_passes_png_through():
+    """PNG bytes pass through unchanged."""
+    from src.builder import _convert_image_for_epub
+
+    png_data = b'\x89PNG\r\n\x1a\n' + b'\x00' * 100
+    result_body, result_type = _convert_image_for_epub(png_data, ".png")
+    assert result_body == png_data
+    assert result_type == "image/png"
+
+
+def test_convert_image_for_epub_passes_jpg_through():
+    """JPG bytes pass through unchanged."""
+    from src.builder import _convert_image_for_epub
+
+    jpg_data = b'\xff\xd8\xff\xe0' + b'\x00' * 100
+    result_body, result_type = _convert_image_for_epub(jpg_data, ".jpg")
+    assert result_body == jpg_data
+    assert result_type == "image/jpeg"
+
+
+def test_convert_image_for_epub_converts_webp():
+    """WebP bytes are converted to PNG."""
+    from src.builder import _convert_image_for_epub
+    from PIL import Image
+    from io import BytesIO
+
+    # Create a real WebP image
+    img = Image.new("RGB", (10, 10), "red")
+    buf = BytesIO()
+    img.save(buf, format="WEBP")
+    webp_data = buf.getvalue()
+
+    result_body, result_type = _convert_image_for_epub(webp_data, ".webp")
+    assert result_type == "image/png"
+    assert result_body[:4] == b'\x89PNG'
+
+
+def test_convert_image_for_epub_converts_svg():
+    """SVG bytes are converted to PNG."""
+    from src.builder import _convert_image_for_epub
+
+    svg_data = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">'
+        b'<rect width="100" height="50" fill="blue"/></svg>'
+    )
+    result_body, result_type = _convert_image_for_epub(svg_data, ".svg")
+    assert result_type == "image/png"
+    assert result_body[:4] == b'\x89PNG'
+
+
+def test_convert_image_for_epub_svg_failure_falls_back():
+    """Broken SVG returns (None, None) so caller can skip it."""
+    from src.builder import _convert_image_for_epub
+
+    result_body, result_type = _convert_image_for_epub(b'\xff\xfe invalid', ".svg")
+    assert result_body is None
+    assert result_type is None
+
