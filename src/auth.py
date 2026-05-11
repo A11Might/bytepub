@@ -45,10 +45,12 @@ def authenticated_session() -> tuple[sync_playwright, BrowserContext]:
     indicator that browser data has been stored from a previous session.
     Firebase refresh tokens in IndexedDB auto-refresh the JWT on navigation.
     """
+    has_session = (USER_DATA_DIR / "Default").exists()
+
     pw = sync_playwright().start()
     context = _launch_context(pw)
 
-    if (USER_DATA_DIR / "Default").exists():
+    if has_session:
         print("Reusing existing browser session")
     else:
         _interactive_login(context)
