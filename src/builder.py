@@ -1,5 +1,7 @@
 import logging
 import re
+import shutil
+import sys
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -9,6 +11,24 @@ from ebooklib import epub
 from src.models import CleanedPage
 
 logger = logging.getLogger(__name__)
+
+
+def _progress_bar(current: int, total: int, label: str = "", width: int = 30) -> None:
+    """Print a single-line progress bar that overwrites itself."""
+    pct = current / total if total else 1
+    filled = int(width * pct)
+    bar = "█" * filled + "░" * (width - filled)
+    line = f"\r  Converting images |{bar}| {current}/{total} ({pct:.0%}) {label}"
+    # Pad to clear any previous longer line
+    term_width = shutil.get_terminal_size().columns
+    if len(line) >= term_width:
+        line = line[: term_width - 1]
+    else:
+        line = line.ljust(term_width)
+    sys.stderr.write(line)
+    if current == total:
+        sys.stderr.write("\n")
+    sys.stderr.flush()
 
 
 def _convert_svg_to_png(svg_data: bytes, ctx=None) -> bytes | None:
@@ -312,6 +332,27 @@ def build_epub(
                 )
                 _own_browser = True
 
+    # Pre-scan HTML to count unique referenced images for progress bar
+    _total_images = 0
+    _converted_images = 0
+    _processed: set[str] = set()  # filenames already converted & embedded
+    if assets_dir and assets_dir.exists():
+        _stem_map = {f.stem: f.name for f in assets_dir.iterdir() if f.is_file()}
+        _referenced: set[str] = set()
+        for page in pages:
+            if cache_dir:
+                html_file = cache_dir / f"ch{page.chapter.index:02d}.html"
+                raw = html_file.read_text() if html_file.exists() else page.html
+            else:
+                raw = page.html
+            for m in re.finditer(r'<img\s[^>]*src="assets/([^"]*)"', raw):
+                _referenced.add(m.group(1))
+            for m in re.finditer(r'<img\s[^>]*src="images/([^"]*)"', raw):
+                actual = _stem_map.get(Path(m.group(1)).stem)
+                if actual:
+                    _referenced.add(actual)
+        _total_images = len(_referenced)
+
     chapters = []
     toc = []
     for page in pages:
@@ -345,18 +386,21 @@ def build_epub(
                 filename = match.group(1)
                 local_path = assets_dir / filename
                 if local_path.exists():
-                    raw_body = local_path.read_bytes()
                     ext = local_path.suffix.lower()
-                    converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
-                    if converted_body is None:
-                        logger.warning(f"  Skipping image {filename}: conversion failed")
-                        continue
-                    # Use .png extension if format was converted
                     epub_filename = filename if ext in (".png", ".jpg", ".jpeg", ".gif") else f"{local_path.stem}.png"
-                    img_item = epub.EpubImage()
-                    img_item.file_name = f"images/{epub_filename}"
-                    img_item.content = converted_body
-                    book.add_item(img_item)
+                    if filename not in _processed:
+                        _processed.add(filename)
+                        _converted_images += 1
+                        _progress_bar(_converted_images, _total_images, filename if ext == ".svg" else "")
+                        raw_body = local_path.read_bytes()
+                        converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
+                        if converted_body is None:
+                            logger.warning(f"  Skipping image {filename}: conversion failed")
+                            continue
+                        img_item = epub.EpubImage()
+                        img_item.file_name = f"images/{epub_filename}"
+                        img_item.content = converted_body
+                        book.add_item(img_item)
                     content = content.replace(f"assets/{filename}", f"images/{epub_filename}")
 
         # Also handle images/ paths (from cleaner direct output)
@@ -371,17 +415,22 @@ def build_epub(
                 local_path = assets_dir / actual
                 epub_filename = actual  # default
                 if local_path.exists():
-                    raw_body = local_path.read_bytes()
                     ext = local_path.suffix.lower()
-                    converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
-                    if converted_body is None:
-                        logger.warning(f"  Skipping image {actual}: conversion failed")
-                        return m.group(0)
                     epub_filename = actual if ext in (".png", ".jpg", ".jpeg", ".gif") else f"{local_path.stem}.png"
-                    img_item = epub.EpubImage()
-                    img_item.file_name = f"images/{epub_filename}"
-                    img_item.content = converted_body
-                    book.add_item(img_item)
+                    if actual not in _processed:
+                        _processed.add(actual)
+                        nonlocal _converted_images
+                        _converted_images += 1
+                        _progress_bar(_converted_images, _total_images, actual if ext == ".svg" else "")
+                        raw_body = local_path.read_bytes()
+                        converted_body, media_type = _convert_image_for_epub(raw_body, ext, ctx=svg_ctx)
+                        if converted_body is None:
+                            logger.warning(f"  Skipping image {actual}: conversion failed")
+                            return m.group(0)
+                        img_item = epub.EpubImage()
+                        img_item.file_name = f"images/{epub_filename}"
+                        img_item.content = converted_body
+                        book.add_item(img_item)
                 return f'src="images/{epub_filename}"'
 
             content = re.sub(r'\bsrc="images/([^"]*)"', _replace_img, content)
@@ -450,6 +499,9 @@ def build_epub(
         _browser.close()
         if not pw:
             _pw.stop()
+
+    if _total_images > 0:
+        print(f"Image conversion complete. Writing EPUB...")
 
     epub.write_epub(str(output_path), book, {})
     return output_path
